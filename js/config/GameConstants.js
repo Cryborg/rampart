@@ -22,6 +22,12 @@ export const GAME_CONFIG = {
         CANNON_SIZE: 2  // Canon 2x2
     },
     
+    // Gameplay
+    GAMEPLAY: {
+        CANNON_RATIO: 0.4,  // 40% des cases dorées divisées par 4 (à tester)
+        MIN_CANNONS: 1      // Minimum de canons autorisés (sécurité)
+    },
+    
     // Timers (en millisecondes)
     TIMERS: {
         REPAIR_PHASE: 15000,

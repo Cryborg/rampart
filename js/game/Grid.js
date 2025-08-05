@@ -295,6 +295,11 @@ export class Grid {
         for (let dx = 0; dx < 2; dx++) {
             for (let dy = 0; dy < 2; dy++) {
                 this.setCellType(x + dx, y + dy, CELL_TYPES.CANNON, playerId);
+                // Retirer la propriété cannonZone car la case est maintenant occupée
+                const cell = this.getCell(x + dx, y + dy);
+                if (cell) {
+                    cell.cannonZone = false;
+                }
             }
         }
         
@@ -374,55 +379,52 @@ export class Grid {
         const enclosedAreas = this.findEnclosedAreas();
         const castles = [];
 
-        enclosedAreas.forEach(area => {
-            // Chercher s'il y a un castle-core dans cette zone OU adjacent à cette zone
-            const cores = area.filter(({x, y}) => {
+        // Trouver tous les castle-cores de la grille une seule fois
+        const allCores = [];
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
                 const cell = this.getCell(x, y);
-                return cell && cell.type === CELL_TYPES.CASTLE_CORE;
-            });
-
-            // Si pas de core dans la zone, chercher si la zone est dans le voisinage d'un core
-            if (cores.length === 0) {
-                const nearbyCores = [];
-                
-                // Trouver tous les castle-cores de la grille
-                const allCores = [];
-                for (let y = 0; y < this.height; y++) {
-                    for (let x = 0; x < this.width; x++) {
-                        const cell = this.getCell(x, y);
-                        if (cell && cell.type === CELL_TYPES.CASTLE_CORE) {
-                            allCores.push({ x, y });
-                        }
-                    }
+                if (cell && cell.type === CELL_TYPES.CASTLE_CORE) {
+                    allCores.push({ x, y });
                 }
-                
-                // Pour chaque core, vérifier si cette zone fermée est dans son voisinage
-                allCores.forEach(core => {
+            }
+        }
+
+        enclosedAreas.forEach(area => {
+            // Toute zone fermée de taille raisonnable devrait être constructible
+            if (area.length >= 4 && area.length <= 150) {
+                // Chercher s'il y a un castle-core dans cette zone
+                const coresInArea = area.filter(({x, y}) => {
+                    const cell = this.getCell(x, y);
+                    return cell && cell.type === CELL_TYPES.CASTLE_CORE;
+                });
+
+                // Si pas de core dans la zone, assigner le core le plus proche
+                let assignedCores = coresInArea;
+                if (assignedCores.length === 0 && allCores.length > 0) {
                     // Calculer le centre de la zone fermée
                     const centerX = area.reduce((sum, cell) => sum + cell.x, 0) / area.length;
                     const centerY = area.reduce((sum, cell) => sum + cell.y, 0) / area.length;
                     
-                    // Distance entre le centre de la zone et le core
-                    const distance = Math.sqrt((centerX - core.x) ** 2 + (centerY - core.y) ** 2);
+                    // Trouver le core le plus proche
+                    let closestCore = allCores[0];
+                    let minDistance = Math.sqrt((centerX - closestCore.x) ** 2 + (centerY - closestCore.y) ** 2);
                     
-                    // Si la zone est dans un rayon de 6 cases du core ET qu'elle est de taille raisonnable, c'est probablement son château
-                    if (distance <= 6 && area.length <= 150) {
-                        const coreKey = `${core.x},${core.y}`;
-                        if (!nearbyCores.find(c => `${c.x},${c.y}` === coreKey)) {
-                            nearbyCores.push(core);
+                    allCores.forEach(core => {
+                        const distance = Math.sqrt((centerX - core.x) ** 2 + (centerY - core.y) ** 2);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            closestCore = core;
                         }
-                    }
-                });
-                
-                if (nearbyCores.length > 0) {
-                    cores.push(...nearbyCores);
+                    });
+                    
+                    assignedCores = [closestCore];
+                    console.log(`🏰 Zone fermée assignée au core le plus proche à distance ${minDistance.toFixed(1)}`);
                 }
-            }
 
-            if (cores.length > 0) {
                 castles.push({
                     area: area,
-                    cores: cores,
+                    cores: assignedCores,
                     size: area.length
                 });
             }

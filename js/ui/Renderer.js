@@ -48,10 +48,10 @@ export class Renderer {
         this.canvas.width = size;
         this.canvas.height = size;
         
-        // Calcul cellSize pour grille avec constantes
+        // Calcul cellSize pour grille avec constantes - forcer entier pour grilles régulières
         const cellSizeX = size / GAME_CONFIG.GRID.WIDTH;
         const cellSizeY = size / GAME_CONFIG.GRID.HEIGHT; 
-        this.cellSize = Math.min(cellSizeX, cellSizeY);
+        this.cellSize = Math.floor(Math.min(cellSizeX, cellSizeY)); // Forcer entier
         
         // Centrer la grille dans le canvas (mais décaler vers le haut pour voir tout)
         const gridWidth = GAME_CONFIG.GRID.WIDTH * this.cellSize;
@@ -76,7 +76,7 @@ export class Renderer {
             }
         }
         
-        // Render grid lines (optional)
+        // Render grid lines (fines et utiles)
         this.renderGridLines(grid);
         
         // Update animations
@@ -208,7 +208,7 @@ export class Renderer {
         // Show damage with cracks
         if (health < 1) {
             this.ctx.strokeStyle = '#ff0000';
-            this.ctx.lineWidth = 2;
+            this.ctx.lineWidth = 1;
             this.ctx.beginPath();
             this.ctx.moveTo(Math.round(x + 2), Math.round(y + 2));
             this.ctx.lineTo(Math.round(x + size - 2), Math.round(y + size - 2));
@@ -302,9 +302,9 @@ export class Renderer {
                     // Arrondir seulement au moment du rendu
                     this.ctx.fillRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
                     
-                    // Add border
-                    this.ctx.strokeStyle = this.adjustBrightness(color, 0.3);
-                    this.ctx.lineWidth = 2;
+                    // Add border (plus discret)
+                    this.ctx.strokeStyle = this.adjustBrightness(color, 0.5); // Plus clair
+                    this.ctx.lineWidth = 1; // Plus fin
                     this.ctx.strokeRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
                 }
             }
@@ -319,7 +319,7 @@ export class Renderer {
         const size = this.cellSize;
         
         this.ctx.strokeStyle = this.colors.hover;
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 1;
         this.ctx.strokeRect(Math.round(screenX), Math.round(screenY), Math.round(size), Math.round(size));
     }
 
@@ -347,7 +347,7 @@ export class Renderer {
         
         // Bordure pour mieux voir l'aperçu
         this.ctx.strokeStyle = canPlace ? '#00ff00' : '#ff0000';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 1;
         // Calculs précis pour la bordure
         const topLeftX = this.gridOffsetX + gridPos.x * this.cellSize;
         const topLeftY = this.gridOffsetY + gridPos.y * this.cellSize;

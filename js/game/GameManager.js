@@ -24,6 +24,10 @@ export class GameManager {
         this.pieceGenerator = new PieceGenerator(true);
         this.currentHoverPos = null;
         
+        // Compteur pour la phase actuelle de placement de canons
+        this.cannonsPlacedThisPhase = 0;
+        this.maxCannonsThisPhase = 0;
+        
         this.canvas = null;
         this.ctx = null;
     }
@@ -77,6 +81,10 @@ export class GameManager {
         this.inputHandler.onKeyPress = (key) => {
             this.handleKeyPress(key);
         };
+        
+        this.inputHandler.onKeyDown = (key) => {
+            this.handleKeyDown(key);
+        };
     }
 
     handleMouseMove(canvasX, canvasY) {
@@ -128,14 +136,28 @@ export class GameManager {
     }
 
     handleKeyPress(key) {
+        console.log(`🔧 Touche pressée: "${key}"`); // Debug
         switch (key) {
-            case 'Escape':
-                this.pauseGame();
-                break;
             case ' ':
             case 'r':
                 if (this.gameState.currentState === 'REPAIR') {
                     this.rotatePiece();
+                }
+                break;
+        }
+    }
+    
+    handleKeyDown(key) {
+        console.log(`🔧 Touche keydown: "${key}"`); // Debug
+        switch (key) {
+            case 'Escape':
+                this.pauseGame();
+                break;
+            case 'Enter':
+            case 'NumpadEnter':
+                if (this.gameState.currentState === 'PLACE_CANNONS') {
+                    console.log('⏩ Passage forcé au combat (Entrée pressée)');
+                    this.gameState.transition('COMBAT');
                 }
                 break;
         }
@@ -158,6 +180,19 @@ export class GameManager {
                         y: gridPos.y,
                         firing: false
                     });
+                    
+                    // Incrémenter le compteur de cette phase
+                    this.cannonsPlacedThisPhase++;
+                    console.log(`🎯 Canon ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase} placé dans cette phase`);
+                    
+                    // Vérifier si plus de canons à placer → transition automatique
+                    const cannonsToPlace = this.calculateCannonsToPlace();
+                    if (cannonsToPlace <= 0) {
+                        console.log(`🎯 Plus de canons à placer ! Transition vers combat.`);
+                        setTimeout(() => {
+                            this.gameState.transition('COMBAT');
+                        }, 1000); // Petit délai pour voir le placement
+                    }
                 } else {
                     console.log(`❌ Impossible de placer un canon à (${gridPos.x}, ${gridPos.y})`);
                 }
@@ -172,6 +207,12 @@ export class GameManager {
     canPlaceCannonAt(x, y) {
         // Validation des coordonnées dans les limites de la grille
         if (x < 0 || y < 0 || x >= GAME_CONFIG.GRID.WIDTH - 1 || y >= GAME_CONFIG.GRID.HEIGHT - 1) {
+            return false;
+        }
+        
+        // Vérifier s'il reste des canons à placer
+        const cannonsToPlace = this.calculateCannonsToPlace();
+        if (cannonsToPlace <= 0) {
             return false;
         }
         
@@ -192,6 +233,54 @@ export class GameManager {
         }
         
         return this.grid.canPlaceCannon(x, y, this.players[this.currentPlayer].id);
+    }
+
+    calculateCannonsToPlace() {
+        // Retourner combien il reste à placer dans cette phase
+        return Math.max(0, this.maxCannonsThisPhase - this.cannonsPlacedThisPhase);
+    }
+    
+    calculateMaxCannonsForPhase() {
+        // Compter SEULEMENT les cases dorées LIBRES (pas occupées par des canons)
+        let freeGoldenCells = 0;
+        for (let y = 0; y < this.grid.height; y++) {
+            for (let x = 0; x < this.grid.width; x++) {
+                const cell = this.grid.getCell(x, y);
+                // Case dorée ET libre (pas un canon)
+                if (cell && cell.cannonZone && cell.type === 'land') {
+                    freeGoldenCells++;
+                }
+            }
+        }
+        
+        // Formule Rampart : floor(40% * (cases_dorées_libres / 4))
+        const maxCannons = Math.floor(GAME_CONFIG.GAMEPLAY.CANNON_RATIO * (freeGoldenCells / 4));
+        
+        console.log(`🎯 Cases dorées libres: ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
+        return Math.max(GAME_CONFIG.GAMEPLAY.MIN_CANNONS, maxCannons);
+    }
+
+    destroyCannon(player, cannonIndex) {
+        // Méthode pour détruire un canon spécifique (sera utilisée durant le combat)
+        const cannon = player.cannons[cannonIndex];
+        if (!cannon) return;
+        
+        // Supprimer le canon de la grille
+        for (let dx = 0; dx < 2; dx++) {
+            for (let dy = 0; dy < 2; dy++) {
+                const cell = this.grid.getCell(cannon.x + dx, cannon.y + dy);
+                if (cell && cell.type === 'cannon') {
+                    this.grid.setCellType(cannon.x + dx, cannon.y + dy, 'destroyed');
+                    // Retirer le marquage cannonZone car c'est détruit
+                    cell.cannonZone = false;
+                }
+            }
+        }
+        
+        // Supprimer de la liste du joueur
+        player.cannons.splice(cannonIndex, 1);
+        
+        console.log(`💥 Canon à (${cannon.x}, ${cannon.y}) détruit !`);
     }
 
     removeCannonAt(x, y) {
@@ -217,7 +306,10 @@ export class GameManager {
                 
                 // Supprimer de la liste du joueur
                 player.cannons.splice(i, 1);
-                console.log(`🗑️ Canon supprimé à (${cannon.x}, ${cannon.y})`);
+                
+                // Décrémenter le compteur de cette phase
+                this.cannonsPlacedThisPhase = Math.max(0, this.cannonsPlacedThisPhase - 1);
+                console.log(`🗑️ Canon supprimé à (${cannon.x}, ${cannon.y}) - ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase}`);
                 return;
             }
         }
@@ -376,6 +468,41 @@ export class GameManager {
         console.log('⏰ Timer de réparation : 15 secondes');
     }
 
+    startCannonPlacementPhase() {
+        console.log('🎯 Phase placement des canons démarrée');
+        
+        // Réinitialiser le compteur de cette phase
+        this.cannonsPlacedThisPhase = 0;
+        this.maxCannonsThisPhase = this.calculateMaxCannonsForPhase();
+        
+        const player = this.players[this.currentPlayer];
+        const currentCannons = player.cannons.length;
+        
+        // Les canons restent en place ! Ils ne sont supprimés qu'au combat s'ils sont détruits
+        console.log(`🎯 Canons actuels: ${currentCannons}, Max cette phase: ${this.maxCannonsThisPhase}`);
+        
+        // Si aucun canon à placer, transition automatique après un délai
+        if (this.maxCannonsThisPhase <= 0) {
+            console.log(`🎯 Aucun canon à placer. Transition automatique vers combat dans 2s.`);
+            setTimeout(() => {
+                this.gameState.transition('COMBAT');
+            }, 2000);
+        }
+        
+        // TODO: Ajouter timer optionnel pour cette phase si nécessaire
+    }
+
+    startCombatPhase() {
+        console.log('⚔️ Phase de combat démarrée');
+        
+        // TODO: Implémenter logique de combat (bateaux ennemis, tirs automatiques)
+        // Pour l'instant, transition automatique vers REPAIR après 5 secondes
+        setTimeout(() => {
+            console.log('⚔️ Combat terminé ! Transition vers réparation.');
+            this.gameState.transition('REPAIR');
+        }, 5000); // 5 secondes de "combat" pour tester
+    }
+
     start() {
         this.uiManager.showMenu();
         this.uiManager.onStartSolo = () => this.startSoloGame();
@@ -396,13 +523,20 @@ export class GameManager {
             if (newState === 'REPAIR') {
                 this.startRepairPhase();
             }
+            
+            if (newState === 'COMBAT') {
+                this.startCombatPhase();
+            }
+            
+            if (newState === 'PLACE_CANNONS') {
+                this.startCannonPlacementPhase();
+            }
         });
         
         // Château déjà créé dans setupDefaultLevel()
         
-        // Start directly in repair phase for testing
-        this.gameState.transition('REPAIR');
-        this.startRepairPhase();
+        // Commencer par la phase de placement des canons (ordre Rampart officiel)
+        this.gameState.transition('PLACE_CANNONS');
         
         this.startGameLoop();
     }
@@ -533,41 +667,150 @@ export class GameManager {
         
         // Indicateur de phase PLACE_CANNONS
         if (this.gameState.currentState === 'PLACE_CANNONS') {
+            const player = this.players[this.currentPlayer];
+            const cannonsToPlace = this.calculateCannonsToPlace();
+            const currentCannons = player.cannons.length;
+            
             // Fond semi-transparent
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            this.ctx.fillRect(this.canvas.width / 2 - 120, 10, 240, 50);
+            this.ctx.fillRect(this.canvas.width / 2 - 140, 10, 280, 70);
             
             // Bordure
             this.ctx.strokeStyle = '#ffd700';
             this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(this.canvas.width / 2 - 120, 10, 240, 50);
+            this.ctx.strokeRect(this.canvas.width / 2 - 140, 10, 280, 70);
             
-            // Texte
+            // Texte principal
             this.ctx.fillStyle = '#ffd700';
             this.ctx.font = 'bold 24px Arial';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('PLACEMENT CANONS', this.canvas.width / 2, 40);
+            this.ctx.fillText('PLACEMENT CANONS', this.canvas.width / 2, 35);
+            
+            // Compteur de canons à placer
+            const cannonCountColor = cannonsToPlace === 0 ? '#ff0000' : '#00ff00';
+            this.ctx.fillStyle = cannonCountColor;
+            this.ctx.font = 'bold 16px Arial';
+            if (cannonsToPlace > 0) {
+                this.ctx.fillText(`${cannonsToPlace} canons à placer`, this.canvas.width / 2, 55);
+            } else {
+                this.ctx.fillText(`Aucun canon à placer`, this.canvas.width / 2, 55);
+            }
             
             // Instructions
             this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = '12px Arial';
-            this.ctx.fillText('Clic gauche: placer • Clic droit: supprimer', this.canvas.width / 2, 55);
+            this.ctx.font = '10px Arial';
+            this.ctx.fillText('Clic gauche: placer • Clic droit: supprimer • Entrée: combat', this.canvas.width / 2, 70);
             
             // Reset text align
             this.ctx.textAlign = 'left';
         }
         
-        // Debug info
-        if (this.gameState.currentState === 'REPAIR') {
-            const player = this.players[this.currentPlayer];
-            if (player.currentPiece) {
-                this.ctx.fillStyle = 'white';
-                this.ctx.font = '16px Arial';
-                this.ctx.fillText(`Pièce: ${player.currentPiece.type}`, 10, 100);
-                this.ctx.fillText(`État: ${this.gameState.currentState}`, 10, 120);
-                this.ctx.fillText(`Pos: (${player.piecePosition.x}, ${player.piecePosition.y})`, 10, 140);
+        // Indicateur de phase COMBAT
+        if (this.gameState.currentState === 'COMBAT') {
+            // Fond semi-transparent
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(this.canvas.width / 2 - 100, 10, 200, 50);
+            
+            // Bordure
+            this.ctx.strokeStyle = '#ff0000';
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeRect(this.canvas.width / 2 - 100, 10, 200, 50);
+            
+            // Texte
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.font = 'bold 24px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('COMBAT !', this.canvas.width / 2, 40);
+            
+            // Reset text align
+            this.ctx.textAlign = 'left';
+        }
+        
+        // Debug info pour débogage compteur canons
+        this.renderDebugInfo();
+    }
+
+    renderDebugInfo() {
+        // Compter les cases cannonZone en temps réel
+        let cannonZoneCells = 0;
+        let landCells = 0;
+        let cannonCells = 0;
+        
+        for (let y = 0; y < this.grid.height; y++) {
+            for (let x = 0; x < this.grid.width; x++) {
+                const cell = this.grid.getCell(x, y);
+                if (cell) {
+                    if (cell.type === 'land') landCells++;
+                    if (cell.type === 'cannon') cannonCells++;
+                    if (cell.cannonZone && cell.type === 'land') cannonZoneCells++;
+                }
             }
         }
+        
+        const player = this.players[this.currentPlayer];
+        const cannonsToPlace = this.calculateCannonsToPlace();
+        const currentCannons = player.cannons.length;
+        
+        // Fond semi-transparent pour debug
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.ctx.fillRect(10, 10, 300, 160);
+        
+        // Bordure
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(10, 10, 300, 160);
+        
+        // Textes debug
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '12px monospace';
+        this.ctx.textAlign = 'left';
+        
+        let yPos = 25;
+        const lineHeight = 14;
+        
+        this.ctx.fillText(`État: ${this.gameState.currentState}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#ffd700';
+        this.ctx.fillText(`Cases cannonZone: ${cannonZoneCells}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#65a30d';
+        this.ctx.fillText(`Cases land: ${landCells}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#7c2d12';
+        this.ctx.fillText(`Cases canon: ${cannonCells}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#ff6b35';
+        this.ctx.fillText(`Canons placés: ${currentCannons}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#00ff00';
+        this.ctx.fillText(`Canons à placer: ${cannonsToPlace}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.fillText(`Phase: ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillText(`Ratio: ${GAME_CONFIG.GAMEPLAY.CANNON_RATIO}`, 15, yPos);
+        yPos += lineHeight;
+        
+        const calculation = GAME_CONFIG.GAMEPLAY.CANNON_RATIO * (cannonZoneCells / 4);
+        this.ctx.fillText(`Calcul: ${calculation.toFixed(2)}`, 15, yPos);
+        yPos += lineHeight;
+        
+        this.ctx.fillText(`Floor: ${Math.floor(calculation)}`, 15, yPos);
+        yPos += lineHeight;
+        
+        const finalResult = Math.max(GAME_CONFIG.GAMEPLAY.MIN_CANNONS, Math.floor(calculation));
+        this.ctx.fillText(`Final: ${finalResult}`, 15, yPos);
+        
+        // Reset text align
+        this.ctx.textAlign = 'left';
     }
 
     handleResize() {

@@ -38,11 +38,12 @@ Recréation du jeu d'arcade classique Rampart (Atari 1990) en JavaScript ES6 mod
 - États: MENU → SELECT_TERRITORY → PLACE_CANNONS → COMBAT → REPAIR → ROUND_END
 - Système d'événements pour les callbacks
 
-#### Grid (24x24)
+#### Grid (48x36)
 - Types de cellules: water, land, wall, castle-core, cannon, destroyed
 - Algorithme flood-fill pour détection des châteaux fermés
-- Validation de placement des pièces
+- Validation de placement des pièces et canons 2x2
 - Propriétés par type (walkable, buildable, destructible)
+- Zones constructibles (cannonZone) marquées en doré
 
 #### TetrisPieces
 - Pièces spécialisées Rampart (plus petites que Tetris classique)
@@ -59,41 +60,51 @@ Recréation du jeu d'arcade classique Rampart (Atari 1990) en JavaScript ES6 mod
 ## Mécaniques de jeu implémentées
 
 ### Système de grille
-- Grille 24x24 avec terrain généré procéduralement
+- Grille 48x36 avec terrain généré procéduralement
 - 6 types de cellules avec propriétés distinctes
-- Détection de zones fermées via flood-fill
+- Détection de zones fermées via flood-fill amélioré
 - Validation de placement en temps réel
+- Zones constructibles automatiquement créées pour châteaux fermés
 
 ### Phases de jeu
-1. **Sélection territoire** (10s) - Choix château de départ
-2. **Placement canons** (15s) - Positionnement stratégique
-3. **Combat** (30s) - Défense automatique
-4. **Réparation** (15s) - Placement pièces Tetris
-5. **Fin de round** (3s) - Calcul scores
+1. **Placement canons** - Formule: floor(40% × (cases_dorées_libres / 4))
+2. **Combat** (5s) - Phase simulée pour test
+3. **Réparation** (15s) - Placement pièces Tetris
+4. **Retour au placement canons** - Cycle continu
+
+**Système de comptage des canons par phase :**
+- Chaque phase PLACE_CANNONS calcule le nombre de canons autorisés
+- Compteur par phase qui se décrémente à chaque placement
+- Transition automatique quand quota atteint
+- Formule basée sur les cases dorées disponibles
 
 ### Système de contrôles
-- Configuration multi-joueurs (1-3 joueurs)
-- 4 schémas: Souris, Flèches, WASD, Pavé numérique
-- Gestion simultanée des entrées multiples
-- Sauvegarde des préférences en localStorage
+- **Souris :** Placement/suppression de canons (clic gauche/droit), déplacement pièces
+- **Clavier :** 
+  - `Espace` / `R` : Rotation des pièces (phase REPAIR)
+  - `Entrée` : Forcer passage au combat (phase PLACE_CANNONS)
+  - `Échap` : Pause/reprendre le jeu
+- **Aperçus visuels :** Prévisualisation canons 2x2 (vert=possible, rouge=impossible)
+- **Interface responsive :** Adaptation automatique taille écran
 
 ## État d'avancement
 
-### ✅ Implémenté (Phase 1 MVP)
-- Architecture modulaire complète
-- Interface HTML/CSS responsive
-- Système de grille avec flood-fill
-- Gestionnaire de rendu Canvas
-- Machine à états de jeu
-- Système de pièces Tetris
-- Gestion des contrôles multi-joueurs
-- Sauvegarde/chargement
+### ✅ Implémenté (Phase 1 MVP - FONCTIONNEL)
+- **✅ Architecture modulaire complète** - GameManager, Grid, Renderer, InputHandler
+- **✅ Interface responsive** - Canvas adaptatif, coordonnées CSS→Canvas corrigées
+- **✅ Système de grille 48x36** - Flood-fill robuste, détection châteaux fermés
+- **✅ Rendu Canvas optimisé** - Pixel art, grilles régulières, coordonnées précises
+- **✅ Machine à états** - PLACE_CANNONS → COMBAT → REPAIR (cycle fonctionnel)
+- **✅ Système de pièces Tetris** - Générateur, rotation, validation placement
+- **✅ Gameplay canons complet** - Placement 2x2, compteur par phase, formule Rampart
+- **✅ Contrôles fonctionnels** - Souris, clavier (Entrée, Espace, Échap)
+- **✅ Interface debug** - Panneau temps réel avec statistiques détaillées
 
-### 🚧 En cours (Phase 2)
-- Tests et débogage du gameplay de base
-- IA des bateaux ennemis
-- Système de combat et tir automatique
-- Balancement et progression de difficulté
+### 🚧 En cours (Phase 2 - PROCHAINES ÉTAPES)
+- **Système de combat** - IA bateaux ennemis, tir automatique des canons
+- **Destruction/réparation** - Canons détruits en combat, murs endommagés
+- **Progression difficulté** - Plus de bateaux, patterns d'attaque
+- **Interface finale** - Retirer panneau debug, polir l'UI
 
 ### 📋 À implémenter (Phase 3)
 - Assets graphiques (sprites 32x32)
@@ -153,17 +164,20 @@ window.game.gameManager.players[0].addScore(1000);
 ```
 
 ### Debug
-- Logs détaillés avec emojis pour identification
-- État de jeu accessible via window.game
-- Rendu de grille avec overlays debug
+- **Panneau debug temps réel** - Cases cannonZone, compteurs, calculs
+- **Logs détaillés** - Emojis pour identification des événements
+- **État accessible** - `window.game.gameManager` pour tests console
+- **Coordonnées précises** - Fix des décalages CSS→Canvas
 
 ## Prochaines étapes prioritaires
 
-1. **Tests gameplay complet** - Vérifier cycle de jeu bout en bout
-2. **Implémentation IA bateaux** - Pathfinding et ciblage intelligent  
-3. **Système de combat** - Tir automatique des canons
-4. **Balancement gameplay** - Ajustement timers et difficultés
-5. **Assets visuels** - Remplacement des couleurs par sprites
+1. **✅ Gameplay de base fonctionnel** - Cycle PLACE_CANNONS → COMBAT → REPAIR
+2. **🎯 Implémentation IA bateaux** - Pathfinding depuis les bords vers le château
+3. **🎯 Système de combat réel** - Tir automatique, collision, destruction
+4. **🎯 Système de dégâts** - Canons détruits, murs endommagés, réparations
+5. **🎯 Interface finale** - Retirer debug, ajouter scores, UI soignée
+
+**État actuel :** MVP entièrement fonctionnel avec système de canons complet. Prêt pour implémentation du combat réel.
 
 ## Notes de compatibilité
 - ES6+ requis (modules, classes, arrow functions)
