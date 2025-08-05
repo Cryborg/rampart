@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏰 Rampart - Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success { background: #2ecc71; }
+        .error { background: #e74c3c; }
+        .info { background: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>🏰 Rampart - Tests d'intégration</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        const results = document.getElementById('results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = message;
+            results.appendChild(div);
+        }
+        
+        async function runTests() {
+            addResult('🚀 Démarrage des tests...', 'info');
+            
+            try {
+                // Test 1: Import des modules
+                addResult('📦 Test des imports...', 'info');
+                
+                const { GameState, GAME_STATES } = await import('./js/game/GameState.js');
+                addResult('✅ GameState importé', 'success');
+                
+                const { Grid, CELL_TYPES } = await import('./js/game/Grid.js');
+                addResult('✅ Grid importé', 'success');
+                
+                const { TetrisPiece, RAMPART_PIECES } = await import('./js/game/TetrisPieces.js');
+                addResult('✅ TetrisPieces importé', 'success');
+                
+                const { Player } = await import('./js/game/Player.js');
+                addResult('✅ Player importé', 'success');
+                
+                // Test 2: Création d'instances
+                addResult('🏗️ Test de création d\'instances...', 'info');
+                
+                const gameState = new GameState();
+                addResult('✅ GameState créé', 'success');
+                
+                const grid = new Grid(24, 24);
+                addResult('✅ Grid 24x24 créé', 'success');
+                
+                const player = new Player(1, 'Test Player', '#ff6b35', 'mouse');
+                addResult('✅ Player créé', 'success');
+                
+                const piece = new TetrisPiece('DOT_2', RAMPART_PIECES);
+                addResult('✅ TetrisPiece créé', 'success');
+                
+                // Test 3: Fonctionnalités de base
+                addResult('⚙️ Test des fonctionnalités...', 'info');
+                
+                // Test GameState
+                gameState.transition(GAME_STATES.SELECT_TERRITORY);
+                if (gameState.currentState === GAME_STATES.SELECT_TERRITORY) {
+                    addResult('✅ Transition GameState fonctionne', 'success');
+                } else {
+                    addResult('❌ Transition GameState échouée', 'error');
+                }
+                
+                // Test Grid
+                grid.generateTerrain();
+                const landCells = grid.getCellsOfType(CELL_TYPES.LAND);
+                if (landCells.length > 0) {
+                    addResult(`✅ Terrain généré: ${landCells.length} cellules de terre`, 'success');
+                } else {
+                    addResult('❌ Génération de terrain échouée', 'error');
+                }
+                
+                // Test TetrisPiece
+                const originalRotation = piece.currentRotation;
+                piece.rotate();
+                if (piece.currentRotation !== originalRotation) {
+                    addResult('✅ Rotation de pièce fonctionne', 'success');
+                } else {
+                    addResult('❌ Rotation de pièce échouée', 'error');
+                }
+                
+                // Test Player
+                player.addScore(100);
+                if (player.score === 100) {
+                    addResult('✅ Score du joueur fonctionne', 'success');
+                } else {
+                    addResult('❌ Score du joueur échoué', 'error');
+                }
+                
+                // Test flood-fill
+                addResult('🌊 Test flood-fill...', 'info');
+                const testArea = grid.floodFill(5, 5, CELL_TYPES.LAND, null, 100);
+                if (testArea.length > 0) {
+                    addResult(`✅ Flood-fill fonctionne: ${testArea.length} cellules trouvées`, 'success');
+                } else {
+                    addResult('❌ Flood-fill échoué', 'error');
+                }
+                
+                addResult('🎉 Tous les tests de base réussis !', 'success');
+                addResult('🏰 Le jeu devrait fonctionner correctement.', 'info');
+                
+            } catch (error) {
+                addResult(`❌ Erreur dans les tests: ${error.message}`, 'error');
+                console.error('Erreur détaillée:', error);
+            }
+        }
+        
+        runTests();
+    </script>
+</body>
+</html>

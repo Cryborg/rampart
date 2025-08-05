@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏰 Rampart - Arcade Game</title>
+    <script src="../../arcade-theme-integration.js"></script>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <header id="gameHeader">
+            <h1>🏰 RAMPART</h1>
+            <div id="gameInfo">
+                <div class="info-panel">
+                    <span class="label">Score:</span>
+                    <span id="score">0</span>
+                </div>
+                <div class="info-panel">
+                    <span class="label">Vies:</span>
+                    <span id="lives">3</span>
+                </div>
+                <div class="info-panel">
+                    <span class="label">Round:</span>
+                    <span id="round">1</span>
+                </div>
+                <div class="info-panel">
+                    <span class="label">Temps:</span>
+                    <span id="timer">--</span>
+                </div>
+            </div>
+        </header>
+
+        <main id="gameMain">
+            <canvas id="gameCanvas" width="768" height="768"></canvas>
+            
+            <div id="gameUI">
+                <div id="currentPiece" class="ui-panel">
+                    <h3>Pièce actuelle</h3>
+                    <canvas id="piecePreview" width="128" height="128"></canvas>
+                    <div class="controls-hint">
+                        <p>🖱️ Clic droit: Rotation</p>
+                        <p>🖱️ Clic gauche: Placer</p>
+                    </div>
+                </div>
+
+                <div id="gameState" class="ui-panel">
+                    <h3 id="phaseTitle">Sélection territoire</h3>
+                    <p id="phaseDescription">Choisissez votre château de départ</p>
+                    <div id="phaseTimer">
+                        <div class="timer-bar">
+                            <div class="timer-fill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="playerStats" class="ui-panel">
+                    <h3>Statistiques</h3>
+                    <div class="stat-row">
+                        <span>Bateaux détruits:</span>
+                        <span id="shipsDestroyed">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Canons placés:</span>
+                        <span id="cannonsPlaced">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Châteaux fermés:</span>
+                        <span id="castlesClosed">0</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div id="menuOverlay" class="overlay hidden">
+            <div class="menu-panel">
+                <h2>🏰 RAMPART</h2>
+                <div class="menu-buttons">
+                    <button id="startSolo" class="menu-btn primary">🎮 Solo</button>
+                    <button id="startMulti" class="menu-btn">👥 Multijoueur</button>
+                    <button id="showControls" class="menu-btn">⌨️ Contrôles</button>
+                    <button id="showHighscores" class="menu-btn">🏆 Scores</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="controlsOverlay" class="overlay hidden">
+            <div class="controls-panel">
+                <h2>⌨️ Configuration des contrôles</h2>
+                <div class="player-configs">
+                    <div class="player-config">
+                        <h3>Joueur 1</h3>
+                        <select id="player1Controls">
+                            <option value="mouse">🖱️ Souris</option>
+                            <option value="keyboard_arrows">⌨️ Flèches</option>
+                            <option value="keyboard_wasd">⌨️ WASD</option>
+                        </select>
+                        <label>
+                            <input type="checkbox" id="player1Active" checked> Actif
+                        </label>
+                    </div>
+                    <div class="player-config">
+                        <h3>Joueur 2</h3>
+                        <select id="player2Controls">
+                            <option value="keyboard_wasd">⌨️ WASD</option>
+                            <option value="keyboard_arrows">⌨️ Flèches</option>
+                            <option value="keyboard_numpad">⌨️ Pavé numérique</option>
+                        </select>
+                        <label>
+                            <input type="checkbox" id="player2Active"> Actif
+                        </label>
+                    </div>
+                    <div class="player-config">
+                        <h3>Joueur 3</h3>
+                        <select id="player3Controls">
+                            <option value="keyboard_numpad">⌨️ Pavé numérique</option>
+                            <option value="keyboard_arrows">⌨️ Flèches</option>
+                            <option value="keyboard_wasd">⌨️ WASD</option>
+                        </select>
+                        <label>
+                            <input type="checkbox" id="player3Active"> Actif
+                        </label>
+                    </div>
+                </div>
+                <button id="testControls" class="menu-btn">🎮 Tester</button>
+                <button id="saveControls" class="menu-btn primary">💾 Sauvegarder</button>
+                <button id="closeControls" class="menu-btn">❌ Fermer</button>
+            </div>
+        </div>
+
+        <div id="gameOverOverlay" class="overlay hidden">
+            <div class="gameover-panel">
+                <h2 id="gameOverTitle">🏁 Partie terminée</h2>
+                <div id="finalStats" class="final-stats">
+                    <div class="stat-line">
+                        <span>Score final:</span>
+                        <span id="finalScore">0</span>
+                    </div>
+                    <div class="stat-line">
+                        <span>Round atteint:</span>
+                        <span id="finalRound">1</span>
+                    </div>
+                    <div class="stat-line">
+                        <span>Bateaux détruits:</span>
+                        <span id="finalShips">0</span>
+                    </div>
+                </div>
+                <div class="menu-buttons">
+                    <button id="restartGame" class="menu-btn primary">🔄 Rejouer</button>
+                    <button id="backToMenu" class="menu-btn">🏠 Menu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js" type="module"></script>
+</body>
+</html>
