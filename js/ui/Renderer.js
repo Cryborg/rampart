@@ -1,4 +1,5 @@
 import { CELL_TYPES, CELL_PROPERTIES } from '../game/Grid.js';
+import { GAME_CONFIG, CoordinateUtils } from '../config/GameConstants.js';
 
 export class Renderer {
     constructor(canvas, ctx) {
@@ -47,16 +48,16 @@ export class Renderer {
         this.canvas.width = size;
         this.canvas.height = size;
         
-        // Calcul cellSize pour grille 48x36 dans canvas carré
-        const cellSizeX = size / 48; // Largeur
-        const cellSizeY = size / 36; // Hauteur  
-        this.cellSize = Math.min(cellSizeX, cellSizeY); // Prendre le plus petit pour que ça rentre
+        // Calcul cellSize pour grille avec constantes
+        const cellSizeX = size / GAME_CONFIG.GRID.WIDTH;
+        const cellSizeY = size / GAME_CONFIG.GRID.HEIGHT; 
+        this.cellSize = Math.min(cellSizeX, cellSizeY);
         
-        // Centrer la grille dans le canvas
-        const gridWidth = 48 * this.cellSize;
-        const gridHeight = 36 * this.cellSize;
+        // Centrer la grille dans le canvas (mais décaler vers le haut pour voir tout)
+        const gridWidth = GAME_CONFIG.GRID.WIDTH * this.cellSize;
+        const gridHeight = GAME_CONFIG.GRID.HEIGHT * this.cellSize;
         this.gridOffsetX = (size - gridWidth) / 2;
-        this.gridOffsetY = (size - gridHeight) / 2;
+        this.gridOffsetY = Math.max(0, (size - gridHeight) / 2 - GAME_CONFIG.CANVAS.OFFSET_Y_ADJUSTMENT);
         
         this.setupPixelArt();
     }
@@ -85,9 +86,10 @@ export class Renderer {
     renderCell(cell) {
         if (!cell) return;
 
-        const screenX = Math.floor(this.gridOffsetX + cell.x * this.cellSize);
-        const screenY = Math.floor(this.gridOffsetY + cell.y * this.cellSize);
-        const size = Math.ceil(this.cellSize);
+        // Calcul précis sans arrondi prématuré
+        const screenX = this.gridOffsetX + cell.x * this.cellSize;
+        const screenY = this.gridOffsetY + cell.y * this.cellSize;
+        const size = this.cellSize;
         
         // Get base color
         let color = this.getCellColor(cell);
@@ -98,7 +100,8 @@ export class Renderer {
         }
         
         this.ctx.fillStyle = color;
-        this.ctx.fillRect(screenX, screenY, size, size);
+        // Arrondir seulement au moment du rendu
+        this.ctx.fillRect(Math.round(screenX), Math.round(screenY), Math.round(size), Math.round(size));
         
         // Special rendering for specific cell types
         this.renderCellDetails(cell, screenX, screenY);
@@ -133,6 +136,7 @@ export class Renderer {
     }
 
     renderCellDetails(cell, screenX, screenY) {
+        // Les méthodes de rendu des détails utiliseront les valeurs précises
         switch (cell.type) {
             case CELL_TYPES.CASTLE_CORE:
                 this.renderCastleCore(screenX, screenY);
@@ -156,9 +160,9 @@ export class Renderer {
         
         // Draw castle symbol
         this.ctx.fillStyle = '#ffffff';
-        this.ctx.fillRect(centerX - 4, centerY - 6, 8, 12);
-        this.ctx.fillRect(centerX - 8, centerY - 4, 4, 8);
-        this.ctx.fillRect(centerX + 4, centerY - 4, 4, 8);
+        this.ctx.fillRect(Math.round(centerX - 4), Math.round(centerY - 6), 8, 12);
+        this.ctx.fillRect(Math.round(centerX - 8), Math.round(centerY - 4), 4, 8);
+        this.ctx.fillRect(Math.round(centerX + 4), Math.round(centerY - 4), 4, 8);
     }
 
     renderCannon(x, y) {
@@ -168,10 +172,10 @@ export class Renderer {
         
         // Draw cannon
         this.ctx.fillStyle = '#2c1810';
-        this.ctx.fillRect(centerX - 6, centerY - 6, 12, 12);
+        this.ctx.fillRect(Math.round(centerX - 6), Math.round(centerY - 6), 12, 12);
         
         this.ctx.fillStyle = '#8b4513';
-        this.ctx.fillRect(centerX - 2, centerY - 8, 4, 6);
+        this.ctx.fillRect(Math.round(centerX - 2), Math.round(centerY - 8), 4, 6);
     }
 
     renderWall(x, y, health) {
@@ -183,22 +187,22 @@ export class Renderer {
         
         // Horizontal lines
         this.ctx.beginPath();
-        this.ctx.moveTo(x, y + size / 3);
-        this.ctx.lineTo(x + size, y + size / 3);
-        this.ctx.moveTo(x, y + 2 * size / 3);
-        this.ctx.lineTo(x + size, y + 2 * size / 3);
+        this.ctx.moveTo(Math.round(x), Math.round(y + size / 3));
+        this.ctx.lineTo(Math.round(x + size), Math.round(y + size / 3));
+        this.ctx.moveTo(Math.round(x), Math.round(y + 2 * size / 3));
+        this.ctx.lineTo(Math.round(x + size), Math.round(y + 2 * size / 3));
         this.ctx.stroke();
         
         // Vertical lines (offset for brick pattern)
         this.ctx.beginPath();
-        this.ctx.moveTo(x + size / 2, y);
-        this.ctx.lineTo(x + size / 2, y + size / 3);
-        this.ctx.moveTo(x + size / 4, y + size / 3);
-        this.ctx.lineTo(x + size / 4, y + 2 * size / 3);
-        this.ctx.moveTo(x + 3 * size / 4, y + size / 3);
-        this.ctx.lineTo(x + 3 * size / 4, y + 2 * size / 3);
-        this.ctx.moveTo(x + size / 2, y + 2 * size / 3);
-        this.ctx.lineTo(x + size / 2, y + size);
+        this.ctx.moveTo(Math.round(x + size / 2), Math.round(y));
+        this.ctx.lineTo(Math.round(x + size / 2), Math.round(y + size / 3));
+        this.ctx.moveTo(Math.round(x + size / 4), Math.round(y + size / 3));
+        this.ctx.lineTo(Math.round(x + size / 4), Math.round(y + 2 * size / 3));
+        this.ctx.moveTo(Math.round(x + 3 * size / 4), Math.round(y + size / 3));
+        this.ctx.lineTo(Math.round(x + 3 * size / 4), Math.round(y + 2 * size / 3));
+        this.ctx.moveTo(Math.round(x + size / 2), Math.round(y + 2 * size / 3));
+        this.ctx.lineTo(Math.round(x + size / 2), Math.round(y + size));
         this.ctx.stroke();
         
         // Show damage with cracks
@@ -206,8 +210,8 @@ export class Renderer {
             this.ctx.strokeStyle = '#ff0000';
             this.ctx.lineWidth = 2;
             this.ctx.beginPath();
-            this.ctx.moveTo(x + 2, y + 2);
-            this.ctx.lineTo(x + size - 2, y + size - 2);
+            this.ctx.moveTo(Math.round(x + 2), Math.round(y + 2));
+            this.ctx.lineTo(Math.round(x + size - 2), Math.round(y + size - 2));
             this.ctx.stroke();
         }
     }
@@ -220,7 +224,7 @@ export class Renderer {
         for (let i = 0; i < 5; i++) {
             const debrisX = x + Math.random() * size;
             const debrisY = y + Math.random() * size;
-            this.ctx.fillRect(debrisX, debrisY, 2, 2);
+            this.ctx.fillRect(Math.round(debrisX), Math.round(debrisY), 2, 2);
         }
     }
 
@@ -231,19 +235,21 @@ export class Renderer {
         
         // Vertical lines
         for (let x = 0; x <= grid.width; x++) {
+            // Calcul précis
             const screenX = this.gridOffsetX + x * this.cellSize;
             this.ctx.beginPath();
-            this.ctx.moveTo(screenX, this.gridOffsetY);
-            this.ctx.lineTo(screenX, this.gridOffsetY + grid.height * this.cellSize);
+            this.ctx.moveTo(Math.round(screenX), Math.round(this.gridOffsetY));
+            this.ctx.lineTo(Math.round(screenX), Math.round(this.gridOffsetY + grid.height * this.cellSize));
             this.ctx.stroke();
         }
         
         // Horizontal lines
         for (let y = 0; y <= grid.height; y++) {
+            // Calcul précis
             const screenY = this.gridOffsetY + y * this.cellSize;
             this.ctx.beginPath();
-            this.ctx.moveTo(this.gridOffsetX, screenY);
-            this.ctx.lineTo(this.gridOffsetX + grid.width * this.cellSize, screenY);
+            this.ctx.moveTo(Math.round(this.gridOffsetX), Math.round(screenY));
+            this.ctx.lineTo(Math.round(this.gridOffsetX + grid.width * this.cellSize), Math.round(screenY));
             this.ctx.stroke();
         }
         
@@ -288,16 +294,18 @@ export class Renderer {
         for (let py = 0; py < piece.shape.length; py++) {
             for (let px = 0; px < piece.shape[py].length; px++) {
                 if (piece.shape[py][px] === 1) {
-                    const screenX = Math.floor(this.gridOffsetX + (x + px) * this.cellSize);
-                    const screenY = Math.floor(this.gridOffsetY + (y + py) * this.cellSize);
-                    const size = Math.ceil(this.cellSize);
+                    // Calculs précis sans arrondi prématuré
+                    const screenX = this.gridOffsetX + (x + px) * this.cellSize;
+                    const screenY = this.gridOffsetY + (y + py) * this.cellSize;
+                    const size = this.cellSize;
                     
-                    this.ctx.fillRect(screenX, screenY, size - 1, size - 1);
+                    // Arrondir seulement au moment du rendu
+                    this.ctx.fillRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
                     
                     // Add border
                     this.ctx.strokeStyle = this.adjustBrightness(color, 0.3);
                     this.ctx.lineWidth = 2;
-                    this.ctx.strokeRect(screenX, screenY, size - 1, size - 1);
+                    this.ctx.strokeRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
                 }
             }
         }
@@ -306,25 +314,70 @@ export class Renderer {
     }
 
     renderHoverIndicator(gridPos) {
-        const screenX = Math.floor(this.gridOffsetX + gridPos.x * this.cellSize);
-        const screenY = Math.floor(this.gridOffsetY + gridPos.y * this.cellSize);
-        const size = Math.ceil(this.cellSize);
+        const screenX = this.gridOffsetX + gridPos.x * this.cellSize;
+        const screenY = this.gridOffsetY + gridPos.y * this.cellSize;
+        const size = this.cellSize;
         
         this.ctx.strokeStyle = this.colors.hover;
         this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(screenX, screenY, size, size);
+        this.ctx.strokeRect(Math.round(screenX), Math.round(screenY), Math.round(size), Math.round(size));
+    }
+
+    renderCannonPreview(gridPos, canPlaceCallback) {
+        // Vérifier si on peut placer un canon à cette position
+        const canPlace = canPlaceCallback(gridPos.x, gridPos.y);
+        
+        // Couleur de l'aperçu : vert si possible, rouge si impossible
+        const previewColor = canPlace ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
+        
+        // Dessiner l'aperçu 2x2 avec les bons offsets
+        this.ctx.fillStyle = previewColor;
+        
+        for (let dx = 0; dx < 2; dx++) {
+            for (let dy = 0; dy < 2; dy++) {
+                // Calculs précis sans arrondi prématuré
+                const screenX = this.gridOffsetX + (gridPos.x + dx) * this.cellSize;
+                const screenY = this.gridOffsetY + (gridPos.y + dy) * this.cellSize;
+                const size = this.cellSize;
+                
+                // Arrondir seulement au moment du rendu
+                this.ctx.fillRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
+            }
+        }
+        
+        // Bordure pour mieux voir l'aperçu
+        this.ctx.strokeStyle = canPlace ? '#00ff00' : '#ff0000';
+        this.ctx.lineWidth = 2;
+        // Calculs précis pour la bordure
+        const topLeftX = this.gridOffsetX + gridPos.x * this.cellSize;
+        const topLeftY = this.gridOffsetY + gridPos.y * this.cellSize;
+        const borderSize = this.cellSize * 2;
+        
+        // Arrondir seulement au moment du rendu
+        this.ctx.strokeRect(Math.round(topLeftX), Math.round(topLeftY), Math.round(borderSize - 1), Math.round(borderSize - 1));
+        
+        // Symbole de canon au centre
+        if (canPlace) {
+            const centerX = topLeftX + this.cellSize;
+            const centerY = topLeftY + this.cellSize;
+            
+            this.ctx.fillStyle = '#8b4513';
+            this.ctx.fillRect(Math.round(centerX - 4), Math.round(centerY - 4), 8, 8);
+            this.ctx.fillStyle = '#2c1810';
+            this.ctx.fillRect(Math.round(centerX - 2), Math.round(centerY - 6), 4, 4);
+        }
     }
 
     screenToGrid(canvasX, canvasY) {
-        // Conversion directe canvas → grille (sans rect.getBoundingClientRect ici)
-        const gridX = Math.floor((canvasX - this.gridOffsetX) / this.cellSize);
-        const gridY = Math.floor((canvasY - this.gridOffsetY) / this.cellSize);
+        // Conversion directe canvas → grille
+        const rawGridX = Math.floor((canvasX - this.gridOffsetX) / this.cellSize);
+        const rawGridY = Math.floor((canvasY - this.gridOffsetY) / this.cellSize);
         
-        // Clamp to valid grid bounds (will be set dynamically based on grid size)
-        const clampedX = Math.max(0, Math.min(47, gridX)); // 48-1
-        const clampedY = Math.max(0, Math.min(35, gridY)); // 36-1
+        // Clamping intelligent dans les limites réelles de la grille
+        const gridX = Math.max(0, Math.min(GAME_CONFIG.GRID.MAX_X, rawGridX));
+        const gridY = Math.max(0, Math.min(GAME_CONFIG.GRID.MAX_Y, rawGridY));
         
-        return { x: clampedX, y: clampedY };
+        return { x: gridX, y: gridY };
     }
 
     gridToScreen(gridX, gridY) {

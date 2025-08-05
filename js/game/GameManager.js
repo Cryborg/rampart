@@ -3,13 +3,14 @@ import { Grid } from './Grid.js';
 import { Renderer } from '../ui/Renderer.js';
 import { InputHandler } from '../ui/InputHandler.js';
 import { Player } from './Player.js';
+import { GAME_CONFIG } from '../config/GameConstants.js';
 import { PieceGenerator } from './TetrisPieces.js';
 
 export class GameManager {
     constructor(uiManager) {
         this.uiManager = uiManager;
         this.gameState = new GameState();
-        this.grid = new Grid(48, 36); // Plus proche du vrai Rampart
+        this.grid = new Grid(GAME_CONFIG.GRID.WIDTH, GAME_CONFIG.GRID.HEIGHT);
         this.renderer = null;
         this.inputHandler = null;
         
@@ -62,31 +63,7 @@ export class GameManager {
         this.createStartingCastle();
     }
 
-    createStartingCastle() {
-        const player = this.players[0];
-        
-        // Placer le château au centre de la grille (où il est protégé de l'eau)
-        const coreX = Math.floor(this.grid.width / 2);
-        const coreY = Math.floor(this.grid.height / 2);
-        
-        // Mettre à jour la position du château du joueur
-        player.castle.core = { x: coreX, y: coreY };
-        
-        this.grid.setCellType(coreX, coreY, 'castle-core');
-        
-        const walls = [
-            {x: coreX - 1, y: coreY - 1}, {x: coreX, y: coreY - 1}, {x: coreX + 1, y: coreY - 1},
-            {x: coreX - 1, y: coreY}, {x: coreX + 1, y: coreY},
-            {x: coreX - 1, y: coreY + 1}, {x: coreX, y: coreY + 1}, {x: coreX + 1, y: coreY + 1}
-        ];
-        
-        walls.forEach(wall => {
-            if (this.grid.isValidPosition(wall.x, wall.y)) {
-                this.grid.setCellType(wall.x, wall.y, 'wall');
-                player.castle.walls.push(wall);
-            }
-        });
-    }
+    // Ancienne méthode supprimée - on utilise maintenant celle ligne 317
 
     setupInputHandlers() {
         this.inputHandler.onMouseMove = (x, y) => {
@@ -102,17 +79,8 @@ export class GameManager {
         };
     }
 
-    handleMouseMove(clientX, clientY) {
-        // Convertir les coordonnées client en coordonnées canvas
-        const rect = this.canvas.getBoundingClientRect();
-        
-        // Prendre en compte le scaling CSS du canvas
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        
-        const canvasX = (clientX - rect.left) * scaleX;
-        const canvasY = (clientY - rect.top) * scaleY;
-        
+    handleMouseMove(canvasX, canvasY) {
+        // On reçoit directement les coordonnées canvas depuis InputHandler
         const gridPos = this.renderer.screenToGrid(canvasX, canvasY);
         this.currentHoverPos = gridPos;
         
@@ -130,11 +98,6 @@ export class GameManager {
                 player.piecePosition.x = Math.max(0, Math.min(this.grid.width - player.currentPiece.width, player.piecePosition.x));
                 player.piecePosition.y = Math.max(0, Math.min(this.grid.height - player.currentPiece.height, player.piecePosition.y));
                 
-                // Log for debug - plus fréquent pour voir si ça marche
-                if (Math.random() < 0.05) { // Log 5% of moves
-                    console.log(`🖱️ Client: (${clientX}, ${clientY}) → Canvas: (${canvasX}, ${canvasY}) → Grid: (${gridPos.x}, ${gridPos.y})`);
-                    console.log(`🧱 Piece position: ${player.piecePosition.x}, ${player.piecePosition.y}`);
-                }
             }
         }
         
@@ -148,7 +111,6 @@ export class GameManager {
     handleMouseClick(x, y, button) {
         const gridPos = this.renderer.screenToGrid(x, y);
         
-        console.log(`🖱️ Click at screen(${x}, ${y}) → grid(${gridPos.x}, ${gridPos.y}) | State: ${this.gameState.currentState} | Button: ${button}`);
         
         switch (this.gameState.currentState) {
             case 'SELECT_TERRITORY':
@@ -208,6 +170,11 @@ export class GameManager {
     }
 
     canPlaceCannonAt(x, y) {
+        // Validation des coordonnées dans les limites de la grille
+        if (x < 0 || y < 0 || x >= GAME_CONFIG.GRID.WIDTH - 1 || y >= GAME_CONFIG.GRID.HEIGHT - 1) {
+            return false;
+        }
+        
         // Vérifier que la position est dans une zone constructible (dorée)
         const topLeft = this.grid.getCell(x, y);
         if (!topLeft || !topLeft.cannonZone) {
@@ -333,7 +300,7 @@ export class GameManager {
         // Vérifier qu'on est bien sur terre et loin de l'eau
         let attempts = 0;
         while (attempts < 10) {
-            const safeArea = this.isSafeForCastle(coreX, coreY, 4); // Rayon de 4 pour château 7x7
+            const safeArea = this.isSafeForCastle(coreX, coreY, GAME_CONFIG.SIZES.SAFETY_RADIUS);
             if (safeArea) break;
             
             // Essayer une autre position
@@ -342,11 +309,12 @@ export class GameManager {
             attempts++;
         }
         
-        // Créer un château fermé 7x7 (contour seulement)
-        for (let x = coreX - 3; x <= coreX + 3; x++) {
-            for (let y = coreY - 3; y <= coreY + 3; y++) {
+        // Créer un château fermé avec constante (contour seulement)
+        const halfSize = Math.floor(GAME_CONFIG.SIZES.CASTLE_SIZE / 2);
+        for (let x = coreX - halfSize; x <= coreX + halfSize; x++) {
+            for (let y = coreY - halfSize; y <= coreY + halfSize; y++) {
                 // SEULEMENT les bords du carré (contour fermé)
-                if (x === coreX - 3 || x === coreX + 3 || y === coreY - 3 || y === coreY + 3) {
+                if (x === coreX - halfSize || x === coreX + halfSize || y === coreY - halfSize || y === coreY + halfSize) {
                     this.grid.setCellType(x, y, 'wall', player.id);
                 }
             }
@@ -356,7 +324,7 @@ export class GameManager {
         this.grid.setCellType(coreX, coreY, 'castle-core', player.id);
         player.castle.core = { x: coreX, y: coreY };
         
-        console.log(`🏰 Château de base 7x7 créé avec core à (${coreX}, ${coreY})`);
+        console.log(`🏰 Château de base ${GAME_CONFIG.SIZES.CASTLE_SIZE}x${GAME_CONFIG.SIZES.CASTLE_SIZE} créé avec core à (${coreX}, ${coreY})`);
         
         // Forcer la détection de fermeture
         this.checkCastleClosure();
@@ -389,7 +357,7 @@ export class GameManager {
         console.log(`🧱 Repair phase started - Piece: ${player.currentPiece.type} at (${player.piecePosition.x}, ${player.piecePosition.y})`);
         
         // Initialiser le timer visible
-        this.repairTimeLeft = 15.0; // Timer de 15 secondes
+        this.repairTimeLeft = GAME_CONFIG.TIMERS.REPAIR_PHASE / 1000; // En secondes
         this.repairStartTime = Date.now();
         
         // Timer de 30 secondes pour la phase de réparation
@@ -403,7 +371,7 @@ export class GameManager {
             player.piecePosition = null;
             
             this.gameState.transition('PLACE_CANNONS');
-        }, 15000); // 15 secondes
+        }, GAME_CONFIG.TIMERS.REPAIR_PHASE);
         
         console.log('⏰ Timer de réparation : 15 secondes');
     }
@@ -430,8 +398,7 @@ export class GameManager {
             }
         });
         
-        // Créer château de base fermé 7x7
-        this.createStartingCastle();
+        // Château déjà créé dans setupDefaultLevel()
         
         // Start directly in repair phase for testing
         this.gameState.transition('REPAIR');
@@ -469,7 +436,7 @@ export class GameManager {
         // Mettre à jour le timer de réparation
         if (this.gameState.currentState === 'REPAIR' && this.repairStartTime) {
             const elapsed = (Date.now() - this.repairStartTime) / 1000;
-            this.repairTimeLeft = Math.max(0, 30 - elapsed);
+            this.repairTimeLeft = Math.max(0, GAME_CONFIG.TIMERS.REPAIR_PHASE / 1000 - elapsed);
         }
         
         this.players.forEach(player => {
@@ -623,36 +590,8 @@ export class GameManager {
     }
 
     renderCannonPreview(gridPos) {
-        // Vérifier si on peut placer un canon à cette position
-        const canPlace = this.canPlaceCannonAt(gridPos.x, gridPos.y);
-        
-        // Couleur de l'aperçu : vert si possible, rouge si impossible
-        const previewColor = canPlace ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
-        
-        // Dessiner l'aperçu 2x2
-        this.ctx.fillStyle = previewColor;
-        
-        for (let dx = 0; dx < 2; dx++) {
-            for (let dy = 0; dy < 2; dy++) {
-                const screenPos = this.renderer.gridToScreen(gridPos.x + dx, gridPos.y + dy);
-                this.ctx.fillRect(screenPos.x, screenPos.y, this.renderer.cellSize - 1, this.renderer.cellSize - 1);
-            }
-        }
-        
-        // Bordure pour mieux voir l'aperçu
-        this.ctx.strokeStyle = canPlace ? '#00ff00' : '#ff0000';
-        this.ctx.lineWidth = 2;
-        const topLeftScreen = this.renderer.gridToScreen(gridPos.x, gridPos.y);
-        this.ctx.strokeRect(topLeftScreen.x, topLeftScreen.y, this.renderer.cellSize * 2 - 1, this.renderer.cellSize * 2 - 1);
-        
-        // Symbole de canon au centre
-        if (canPlace) {
-            const centerScreen = this.renderer.gridToScreen(gridPos.x + 0.5, gridPos.y + 0.5);
-            this.ctx.fillStyle = '#8b4513';
-            this.ctx.fillRect(centerScreen.x - 4, centerScreen.y - 4, 8, 8);
-            this.ctx.fillStyle = '#2c1810';
-            this.ctx.fillRect(centerScreen.x - 2, centerScreen.y - 6, 4, 4);
-        }
+        // Déléguer au renderer pour utiliser le bon contexte et les bons offsets
+        this.renderer.renderCannonPreview(gridPos, (x, y) => this.canPlaceCannonAt(x, y));
     }
 
     clearRepairTimer() {

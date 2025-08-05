@@ -31,8 +31,8 @@ export class InputHandler {
             
             this.mousePos = this.getMousePosition(e);
             if (this.callbacks.onMouseMove) {
-                // Passer les coordonnées correctes
-                this.callbacks.onMouseMove(e.clientX, e.clientY, e);
+                // Passer les coordonnées canvas comme pour onMouseClick
+                this.callbacks.onMouseMove(this.mousePos.x, this.mousePos.y, e);
             }
         });
 
@@ -63,12 +63,10 @@ export class InputHandler {
             if (!this.isEnabled) return;
             
             e.preventDefault();
+            
             const pos = this.getMousePosition(e);
             
-            console.log(`🖱️ InputHandler click: clientX=${e.clientX}, clientY=${e.clientY} → pos=(${pos.x}, ${pos.y})`);
-            
             if (this.callbacks.onMouseClick) {
-                // Utiliser les coordonnées canvas comme pour mousemove !
                 this.callbacks.onMouseClick(pos.x, pos.y, e.button, e);
             }
         });
@@ -121,7 +119,7 @@ export class InputHandler {
             
             const pos = this.getMousePosition(e);
             if (this.callbacks.onMouseClick) {
-                this.callbacks.onMouseClick(e.clientX, e.clientY, 2, e); // Right click = button 2
+                this.callbacks.onMouseClick(pos.x, pos.y, 2, e);
             }
         });
     }
@@ -187,17 +185,35 @@ export class InputHandler {
 
     getMousePosition(e) {
         const rect = this.canvas.getBoundingClientRect();
+        
+        // Coordonnées dans l'espace CSS
+        const cssX = e.clientX - rect.left;
+        const cssY = e.clientY - rect.top;
+        
+        // Scaling pour convertir CSS → Canvas
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: cssX * scaleX,
+            y: cssY * scaleY
         };
     }
 
     getTouchPosition(touch) {
         const rect = this.canvas.getBoundingClientRect();
+        
+        // Coordonnées dans l'espace CSS
+        const cssX = touch.clientX - rect.left;
+        const cssY = touch.clientY - rect.top;
+        
+        // Scaling pour convertir CSS → Canvas
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        
         return {
-            x: touch.clientX - rect.left,
-            y: touch.clientY - rect.top
+            x: cssX * scaleX,
+            y: cssY * scaleY
         };
     }
 
@@ -219,7 +235,7 @@ export class InputHandler {
         return this.mouseButtons.has(button);
     }
 
-    getMousePosition() {
+    getCurrentMousePosition() {
         return { ...this.mousePos };
     }
 
