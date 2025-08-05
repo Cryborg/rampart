@@ -405,8 +405,8 @@ export class Grid {
                     // Distance entre le centre de la zone et le core
                     const distance = Math.sqrt((centerX - core.x) ** 2 + (centerY - core.y) ** 2);
                     
-                    // Si la zone est dans un rayon de 4 cases du core ET qu'elle est de taille raisonnable, c'est probablement son château
-                    if (distance <= 4 && area.length <= 50) {
+                    // Si la zone est dans un rayon de 6 cases du core ET qu'elle est de taille raisonnable, c'est probablement son château
+                    if (distance <= 6 && area.length <= 150) {
                         const coreKey = `${core.x},${core.y}`;
                         if (!nearbyCores.find(c => `${c.x},${c.y}` === coreKey)) {
                             nearbyCores.push(core);
@@ -432,14 +432,16 @@ export class Grid {
     }
 
     isAreaEnclosed(area) {
-        // Check if area is completely surrounded by walls or water
+        // Check if area is completely surrounded by walls
         const areaSet = new Set(area.map(({ x, y }) => `${x},${y}`));
 
         for (const { x, y } of area) {
-            // Vérifier les 4 voisins orthogonaux (comme dans la plupart des jeux)
+            // Vérifier les 8 voisins (orthogonaux + diagonaux) pour une vraie fermeture
             const neighbors = [
                 { x: x + 1, y }, { x: x - 1, y },        // horizontaux
-                { x, y: y + 1 }, { x, y: y - 1 }         // verticaux
+                { x, y: y + 1 }, { x, y: y - 1 },        // verticaux
+                { x: x + 1, y: y + 1 }, { x: x - 1, y: y - 1 },  // diagonales
+                { x: x + 1, y: y - 1 }, { x: x - 1, y: y + 1 }   // diagonales
             ];
 
             for (const neighbor of neighbors) {
@@ -450,8 +452,9 @@ export class Grid {
                 const neighborKey = `${neighbor.x},${neighbor.y}`;
                 if (!areaSet.has(neighborKey)) {
                     const neighborCell = this.getCell(neighbor.x, neighbor.y);
-                    if (neighborCell.type !== CELL_TYPES.WALL) {
-                        return false; // Not enclosed
+                    // Accepter les murs ET les castle-cores comme barrières
+                    if (neighborCell.type !== CELL_TYPES.WALL && neighborCell.type !== CELL_TYPES.CASTLE_CORE) {
+                        return false; // Not enclosed - il y a une ouverture
                     }
                 }
             }

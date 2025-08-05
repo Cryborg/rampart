@@ -47,10 +47,16 @@ export class Renderer {
         this.canvas.width = size;
         this.canvas.height = size;
         
-        // Calcul exact du cellSize pour éviter les décalages
-        this.cellSize = size / 24; // Ne pas arrondir ici
-        this.gridOffsetX = 0; // Pas d'offset, la grille prend tout le canvas
-        this.gridOffsetY = 0;
+        // Calcul cellSize pour grille 48x36 dans canvas carré
+        const cellSizeX = size / 48; // Largeur
+        const cellSizeY = size / 36; // Hauteur  
+        this.cellSize = Math.min(cellSizeX, cellSizeY); // Prendre le plus petit pour que ça rentre
+        
+        // Centrer la grille dans le canvas
+        const gridWidth = 48 * this.cellSize;
+        const gridHeight = 36 * this.cellSize;
+        this.gridOffsetX = (size - gridWidth) / 2;
+        this.gridOffsetY = (size - gridHeight) / 2;
         
         this.setupPixelArt();
     }
@@ -314,9 +320,9 @@ export class Renderer {
         const gridX = Math.floor((canvasX - this.gridOffsetX) / this.cellSize);
         const gridY = Math.floor((canvasY - this.gridOffsetY) / this.cellSize);
         
-        // Clamp to valid grid bounds
-        const clampedX = Math.max(0, Math.min(23, gridX));
-        const clampedY = Math.max(0, Math.min(23, gridY));
+        // Clamp to valid grid bounds (will be set dynamically based on grid size)
+        const clampedX = Math.max(0, Math.min(47, gridX)); // 48-1
+        const clampedY = Math.max(0, Math.min(35, gridY)); // 36-1
         
         return { x: clampedX, y: clampedY };
     }

@@ -36,9 +36,8 @@ export class Player {
     }
 
     update(deltaTime) {
-        this.cannons.forEach(cannon => {
-            cannon.update(deltaTime);
-        });
+        // Les canons sont de simples objets {x, y, firing}, pas des classes
+        // Pas besoin d'update pour l'instant
     }
 
     addScore(points, reason = '') {

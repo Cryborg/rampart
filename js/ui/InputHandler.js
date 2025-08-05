@@ -43,7 +43,8 @@ export class InputHandler {
             this.mouseButtons.add(e.button);
             
             if (this.callbacks.onMouseDown) {
-                this.callbacks.onMouseDown(this.mousePos.x, this.mousePos.y, e.button, e);
+                // Utiliser les mêmes coordonnées que pour mousemove
+                this.callbacks.onMouseDown(e.clientX, e.clientY, e.button, e);
             }
         });
 
@@ -64,7 +65,10 @@ export class InputHandler {
             e.preventDefault();
             const pos = this.getMousePosition(e);
             
+            console.log(`🖱️ InputHandler click: clientX=${e.clientX}, clientY=${e.clientY} → pos=(${pos.x}, ${pos.y})`);
+            
             if (this.callbacks.onMouseClick) {
+                // Utiliser les coordonnées canvas comme pour mousemove !
                 this.callbacks.onMouseClick(pos.x, pos.y, e.button, e);
             }
         });
@@ -117,7 +121,7 @@ export class InputHandler {
             
             const pos = this.getMousePosition(e);
             if (this.callbacks.onMouseClick) {
-                this.callbacks.onMouseClick(pos.x, pos.y, 2, e); // Right click = button 2
+                this.callbacks.onMouseClick(e.clientX, e.clientY, 2, e); // Right click = button 2
             }
         });
     }
@@ -177,7 +181,7 @@ export class InputHandler {
         }
         
         if (this.callbacks.onMouseClick) {
-            this.callbacks.onMouseClick(this.mousePos.x, this.mousePos.y, 0, e);
+            this.callbacks.onMouseClick(e.clientX, e.clientY, 0, e);
         }
     }
 

@@ -9,7 +9,7 @@ export class GameManager {
     constructor(uiManager) {
         this.uiManager = uiManager;
         this.gameState = new GameState();
-        this.grid = new Grid(24, 24);
+        this.grid = new Grid(48, 36); // Plus proche du vrai Rampart
         this.renderer = null;
         this.inputHandler = null;
         
@@ -51,7 +51,7 @@ export class GameManager {
     initializePlayers() {
         const player1 = new Player(1, 'Joueur 1', '#ff6b35', 'mouse');
         player1.territory = { startX: 0, startY: 0, width: 12, height: 12 };
-        player1.castle.core = { x: 6, y: 6 };
+        // Le core sera créé dans createTestCastle()
         
         this.players.push(player1);
         this.currentPlayer = 0;
@@ -127,8 +127,8 @@ export class GameManager {
                 };
                 
                 // Clamp to grid bounds
-                player.piecePosition.x = Math.max(0, Math.min(24 - player.currentPiece.width, player.piecePosition.x));
-                player.piecePosition.y = Math.max(0, Math.min(24 - player.currentPiece.height, player.piecePosition.y));
+                player.piecePosition.x = Math.max(0, Math.min(this.grid.width - player.currentPiece.width, player.piecePosition.x));
+                player.piecePosition.y = Math.max(0, Math.min(this.grid.height - player.currentPiece.height, player.piecePosition.y));
                 
                 // Log for debug - plus fréquent pour voir si ça marche
                 if (Math.random() < 0.05) { // Log 5% of moves
@@ -323,6 +323,57 @@ export class GameManager {
         }
     }
 
+    createStartingCastle() {
+        const player = this.players[0];
+        
+        // Trouver une position sûre loin de l'eau (centre de la grille)
+        let coreX = Math.floor(this.grid.width / 2);
+        let coreY = Math.floor(this.grid.height / 2);
+        
+        // Vérifier qu'on est bien sur terre et loin de l'eau
+        let attempts = 0;
+        while (attempts < 10) {
+            const safeArea = this.isSafeForCastle(coreX, coreY, 4); // Rayon de 4 pour château 7x7
+            if (safeArea) break;
+            
+            // Essayer une autre position
+            coreX = Math.floor(this.grid.width * 0.3 + Math.random() * this.grid.width * 0.4);
+            coreY = Math.floor(this.grid.height * 0.3 + Math.random() * this.grid.height * 0.4);
+            attempts++;
+        }
+        
+        // Créer un château fermé 7x7 (contour seulement)
+        for (let x = coreX - 3; x <= coreX + 3; x++) {
+            for (let y = coreY - 3; y <= coreY + 3; y++) {
+                // SEULEMENT les bords du carré (contour fermé)
+                if (x === coreX - 3 || x === coreX + 3 || y === coreY - 3 || y === coreY + 3) {
+                    this.grid.setCellType(x, y, 'wall', player.id);
+                }
+            }
+        }
+        
+        // Placer le core DANS la zone fermée
+        this.grid.setCellType(coreX, coreY, 'castle-core', player.id);
+        player.castle.core = { x: coreX, y: coreY };
+        
+        console.log(`🏰 Château de base 7x7 créé avec core à (${coreX}, ${coreY})`);
+        
+        // Forcer la détection de fermeture
+        this.checkCastleClosure();
+    }
+    
+    isSafeForCastle(centerX, centerY, radius) {
+        // Vérifier qu'il n'y a pas d'eau dans un rayon donné
+        for (let x = centerX - radius; x <= centerX + radius; x++) {
+            for (let y = centerY - radius; y <= centerY + radius; y++) {
+                if (!this.grid.isValidPosition(x, y)) return false;
+                const cell = this.grid.getCell(x, y);
+                if (cell.type === 'water') return false;
+            }
+        }
+        return true;
+    }
+
     startRepairPhase() {
         const player = this.players[this.currentPlayer];
         
@@ -338,13 +389,19 @@ export class GameManager {
         console.log(`🧱 Repair phase started - Piece: ${player.currentPiece.type} at (${player.piecePosition.x}, ${player.piecePosition.y})`);
         
         // Initialiser le timer visible
-        this.repairTimeLeft = 15.0;
+        this.repairTimeLeft = 15.0; // Timer de 15 secondes
         this.repairStartTime = Date.now();
         
-        // Timer de 15 secondes pour la phase de réparation
+        // Timer de 30 secondes pour la phase de réparation
         this.repairPhaseTimer = setTimeout(() => {
             console.log('⏰ Temps de réparation écoulé ! Transition vers placement des canons.');
             this.repairTimeLeft = 0;
+            
+            // Cacher la pièce courante
+            const player = this.players[this.currentPlayer];
+            player.currentPiece = null;
+            player.piecePosition = null;
+            
             this.gameState.transition('PLACE_CANNONS');
         }, 15000); // 15 secondes
         
@@ -372,6 +429,9 @@ export class GameManager {
                 this.startRepairPhase();
             }
         });
+        
+        // Créer château de base fermé 7x7
+        this.createStartingCastle();
         
         // Start directly in repair phase for testing
         this.gameState.transition('REPAIR');
@@ -409,7 +469,7 @@ export class GameManager {
         // Mettre à jour le timer de réparation
         if (this.gameState.currentState === 'REPAIR' && this.repairStartTime) {
             const elapsed = (Date.now() - this.repairStartTime) / 1000;
-            this.repairTimeLeft = Math.max(0, 15 - elapsed);
+            this.repairTimeLeft = Math.max(0, 30 - elapsed);
         }
         
         this.players.forEach(player => {
@@ -467,9 +527,13 @@ export class GameManager {
         this.renderer.clear();
         this.renderer.renderGrid(this.grid);
         
-        // Render hover indicator BEFORE players to see the cursor position
-        if (this.currentHoverPos && this.gameState.currentState === 'REPAIR') {
-            this.renderer.renderHoverIndicator(this.currentHoverPos);
+        // Render hover indicators based on current state
+        if (this.currentHoverPos) {
+            if (this.gameState.currentState === 'REPAIR') {
+                this.renderer.renderHoverIndicator(this.currentHoverPos);
+            } else if (this.gameState.currentState === 'PLACE_CANNONS' && this.cannonPreviewPos) {
+                this.renderCannonPreview(this.cannonPreviewPos);
+            }
         }
         
         this.renderer.renderPlayers(this.players);
@@ -495,6 +559,32 @@ export class GameManager {
             this.ctx.fillStyle = '#ffff00';
             this.ctx.font = 'bold 14px Arial';
             this.ctx.fillText('RÉPARATION', this.canvas.width / 2, 62);
+            
+            // Reset text align
+            this.ctx.textAlign = 'left';
+        }
+        
+        // Indicateur de phase PLACE_CANNONS
+        if (this.gameState.currentState === 'PLACE_CANNONS') {
+            // Fond semi-transparent
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(this.canvas.width / 2 - 120, 10, 240, 50);
+            
+            // Bordure
+            this.ctx.strokeStyle = '#ffd700';
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeRect(this.canvas.width / 2 - 120, 10, 240, 50);
+            
+            // Texte
+            this.ctx.fillStyle = '#ffd700';
+            this.ctx.font = 'bold 24px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('PLACEMENT CANONS', this.canvas.width / 2, 40);
+            
+            // Instructions
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText('Clic gauche: placer • Clic droit: supprimer', this.canvas.width / 2, 55);
             
             // Reset text align
             this.ctx.textAlign = 'left';
@@ -530,6 +620,39 @@ export class GameManager {
     pauseGame() {
         this.isPaused = !this.isPaused;
         console.log(this.isPaused ? '⏸️ Game paused' : '▶️ Game resumed');
+    }
+
+    renderCannonPreview(gridPos) {
+        // Vérifier si on peut placer un canon à cette position
+        const canPlace = this.canPlaceCannonAt(gridPos.x, gridPos.y);
+        
+        // Couleur de l'aperçu : vert si possible, rouge si impossible
+        const previewColor = canPlace ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
+        
+        // Dessiner l'aperçu 2x2
+        this.ctx.fillStyle = previewColor;
+        
+        for (let dx = 0; dx < 2; dx++) {
+            for (let dy = 0; dy < 2; dy++) {
+                const screenPos = this.renderer.gridToScreen(gridPos.x + dx, gridPos.y + dy);
+                this.ctx.fillRect(screenPos.x, screenPos.y, this.renderer.cellSize - 1, this.renderer.cellSize - 1);
+            }
+        }
+        
+        // Bordure pour mieux voir l'aperçu
+        this.ctx.strokeStyle = canPlace ? '#00ff00' : '#ff0000';
+        this.ctx.lineWidth = 2;
+        const topLeftScreen = this.renderer.gridToScreen(gridPos.x, gridPos.y);
+        this.ctx.strokeRect(topLeftScreen.x, topLeftScreen.y, this.renderer.cellSize * 2 - 1, this.renderer.cellSize * 2 - 1);
+        
+        // Symbole de canon au centre
+        if (canPlace) {
+            const centerScreen = this.renderer.gridToScreen(gridPos.x + 0.5, gridPos.y + 0.5);
+            this.ctx.fillStyle = '#8b4513';
+            this.ctx.fillRect(centerScreen.x - 4, centerScreen.y - 4, 8, 8);
+            this.ctx.fillStyle = '#2c1810';
+            this.ctx.fillRect(centerScreen.x - 2, centerScreen.y - 6, 4, 4);
+        }
     }
 
     clearRepairTimer() {
