@@ -151,6 +151,9 @@ export class Grid {
         const riverX = Math.floor(this.width * 0.65); // Rivière à 65% pour favoriser le joueur
         const riverWidth = 3; // Largeur de la rivière
         
+        // Créer une côte naturelle avec des petites criques
+        this.generateNaturalCoastline(riverX);
+        
         // Créer la rivière verticale de séparation
         for (let x = riverX; x < riverX + riverWidth && x < this.width; x++) {
             for (let y = 0; y < this.height; y++) {
@@ -158,30 +161,50 @@ export class Grid {
             }
         }
         
-        // Côté droit = mer (zone ennemie)
+        // Côté droit = mer pure (plus d'îlots aléatoires)
         for (let x = riverX + riverWidth; x < this.width; x++) {
             for (let y = 0; y < this.height; y++) {
-                // Garder quelques îlots de terre pour variété
-                if (Math.random() < 0.2) {
-                    this.setCellType(x, y, CELL_TYPES.LAND);
-                } else {
-                    this.setCellType(x, y, CELL_TYPES.WATER);
-                }
+                this.setCellType(x, y, CELL_TYPES.WATER);
             }
         }
         
-        // Bordures eau sur le côté droit
+        // Bordures eau UNIQUEMENT sur le côté droit (pas de piège haut/bas)
         for (let y = 0; y < this.height; y++) {
             this.setCellType(this.width - 1, y, CELL_TYPES.WATER);
         }
         
-        // Bordures eau haut/bas
-        for (let x = 0; x < this.width; x++) {
-            this.setCellType(x, 0, CELL_TYPES.WATER);
-            this.setCellType(x, this.height - 1, CELL_TYPES.WATER);
-        }
+        // PAS de bordures eau haut/bas - que de la terre normale
         
-        console.log(`🗺️ Terrain solo : Joueur gauche (${riverX} cases), Mer droite`);
+        console.log(`🗺️ Terrain solo : Joueur gauche (${riverX} cases), Mer droite avec côte naturelle`);
+    }
+
+    generateNaturalCoastline(baseCoastX) {
+        // Créer une ligne de côte naturelle avec des petites variations
+        for (let y = 1; y < this.height - 1; y++) {
+            // Variation sinusoïdale légère pour un aspect naturel
+            const waveOffset = Math.sin(y * 0.3) * 2;
+            const randomVariation = (Math.random() - 0.5) * 1.5;
+            const coastX = Math.floor(baseCoastX + waveOffset + randomVariation);
+            
+            // S'assurer que la côte reste dans les limites
+            const clampedCoastX = Math.max(Math.floor(this.width * 0.5), 
+                                          Math.min(baseCoastX + 3, coastX));
+            
+            // Créer une petite crique occasionnellement
+            if (Math.random() < 0.15) { // 15% de chance
+                // Petite crique : creuser 1-2 cases vers la terre
+                const criqueDepth = Math.floor(Math.random() * 2) + 1;
+                for (let i = 0; i < criqueDepth; i++) {
+                    const criqueX = clampedCoastX - i;
+                    if (criqueX > 0) {
+                        this.setCellType(criqueX, y, CELL_TYPES.WATER);
+                        // Étendre la crique sur 2-3 cases verticalement
+                        if (y > 0) this.setCellType(criqueX, y - 1, CELL_TYPES.WATER);
+                        if (y < this.height - 1) this.setCellType(criqueX, y + 1, CELL_TYPES.WATER);
+                    }
+                }
+            }
+        }
     }
 
     generate2PlayerTerrain() {

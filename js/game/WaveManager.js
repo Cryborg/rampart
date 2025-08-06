@@ -9,6 +9,7 @@ export class WaveManager {
         // État des vagues
         this.currentWave = 0;
         this.enemyShips = [];
+        this.landUnits = []; // Troupes terrestres débarquées
         this.waveActive = false;
         this.waveStartTime = 0;
         this.waveDuration = 30000; // 30 secondes par vague
@@ -88,28 +89,19 @@ export class WaveManager {
     calculateSoloSpawnPoints() {
         const spawnPoints = [];
         
-        // En mode solo, spawner depuis la mer (côté droit)
-        const rightWaterStart = Math.floor(this.grid.width * 0.7);
+        // Spawner depuis le bord droit de l'écran sur toute la hauteur
+        const spawnX = this.grid.width - 1; // Tout à droite du canvas
         
-        // Points le long du bord droit
-        for (let y = 1; y < this.grid.height - 1; y += 3) {
-            for (let x = rightWaterStart; x < this.grid.width - 1; x++) {
-                const cell = this.grid.getCell(x, y);
-                if (cell && cell.type === CELL_TYPES.WATER) {
-                    spawnPoints.push({ x, y, side: 'right' });
-                    break; // Un seul point par ligne
-                }
-            }
+        // Créer des points de spawn dispersés sur toute la hauteur
+        for (let y = 1; y < this.grid.height - 1; y += 2) { // Tous les 2 cases en hauteur
+            spawnPoints.push({ 
+                x: spawnX, 
+                y: y, 
+                side: 'right' 
+            });
         }
         
-        // Points depuis le bas (si il y a de l'eau)
-        for (let x = rightWaterStart; x < this.grid.width - 1; x += 3) {
-            const cell = this.grid.getCell(x, this.grid.height - 1);
-            if (cell && cell.type === CELL_TYPES.WATER) {
-                spawnPoints.push({ x, y: this.grid.height - 1, side: 'bottom' });
-            }
-        }
-        
+        console.log(`📍 ${spawnPoints.length} points de spawn créés sur bord droit (x=${spawnX})`);
         this.waveConfig.spawnPoints = spawnPoints;
     }
 
@@ -203,17 +195,64 @@ export class WaveManager {
     scheduleSpawns(pattern) {
         this.spawnQueue = [];
         
-        // Créer la queue de spawn
+        // Créer la liste des bateaux à spawner
+        const shipsToSpawn = [];
         for (let shipType in pattern) {
             for (let i = 0; i < pattern[shipType]; i++) {
-                this.spawnQueue.push(shipType);
+                shipsToSpawn.push(shipType);
             }
         }
         
-        // Mélanger la queue pour plus de variété
-        this.shuffleArray(this.spawnQueue);
+        // Mélanger pour plus de variété
+        this.shuffleArray(shipsToSpawn);
         
-        console.log(`📋 Queue de spawn: ${this.spawnQueue.length} ennemis programmés`);
+        // Spawner tous les bateaux immédiatement au début de la vague
+        this.spawnAllShipsImmediately(shipsToSpawn);
+        
+        console.log(`📋 ${shipsToSpawn.length} ennemis spawnés immédiatement`);
+    }
+
+    spawnAllShipsImmediately(shipsToSpawn) {
+        const spawnPoints = [...this.waveConfig.spawnPoints]; // Copie des points disponibles
+        
+        for (let i = 0; i < shipsToSpawn.length; i++) {
+            const shipType = shipsToSpawn[i];
+            
+            // Choisir un point de spawn (en rotation pour éviter l'accumulation)
+            const spawnPoint = spawnPoints[i % spawnPoints.length];
+            
+            if (spawnPoint) {
+                // Spawner un peu plus loin dans la mer pour qu'ils soient bien visibles
+                const spawnX = spawnPoint.x + Math.random() * 3; // 0-3 cases vers la mer
+                const spawnY = spawnPoint.y + (Math.random() - 0.5) * 1.5; // Légère variation verticale
+                
+                this.createShip(shipType, spawnX, spawnY);
+                console.log(`🚢 ${shipType} spawn à (${spawnX.toFixed(1)}, ${spawnY.toFixed(1)})`);
+            }
+        }
+    }
+
+    createShip(shipType, x, y) {
+        let ship;
+        switch (shipType) {
+            case 'basic':
+                ship = ShipFactory.createBasicShip(x, y);
+                break;
+            case 'fast':
+                ship = ShipFactory.createFastShip(x, y);
+                break;
+            case 'heavy':
+                ship = ShipFactory.createHeavyShip(x, y);
+                break;
+            case 'artillery':
+                ship = ShipFactory.createArtilleryShip(x, y);
+                break;
+            default:
+                ship = ShipFactory.createBasicShip(x, y);
+        }
+        
+        this.enemyShips.push(ship);
+        console.log(`🚢 ${shipType} créé à (${x.toFixed(1)}, ${y.toFixed(1)})`);
     }
 
     update(deltaTime) {
@@ -221,8 +260,7 @@ export class WaveManager {
         
         const now = Date.now();
         
-        // Gérer les spawns
-        this.updateSpawning(now);
+        // Plus besoin de gérer les spawns progressifs, ils sont tous créés au début
         
         // Mettre à jour tous les bateaux ennemis
         for (let i = this.enemyShips.length - 1; i >= 0; i--) {
@@ -241,53 +279,23 @@ export class WaveManager {
             }
         }
         
+        // Mettre à jour toutes les unités terrestres
+        for (let i = this.landUnits.length - 1; i >= 0; i--) {
+            const unit = this.landUnits[i];
+            
+            if (unit.update && typeof unit.update === 'function') {
+                unit.update(deltaTime, this.gameManager);
+            }
+            
+            // Supprimer les unités détruites
+            if (!unit.active) {
+                this.landUnits.splice(i, 1);
+                console.log('🏃 Unité terrestre retirée (détruite)');
+            }
+        }
+        
         // Vérifier la fin de vague
         this.checkWaveEnd(now);
-    }
-
-    updateSpawning(now) {
-        // Vérifier s'il faut spawner un nouvel ennemi
-        if (this.spawnQueue.length > 0 && 
-            this.enemyShips.length < this.waveConfig.maxEnemies &&
-            now - this.waveConfig.lastSpawnTime >= this.waveConfig.spawnInterval) {
-            
-            this.spawnNextEnemy();
-            this.waveConfig.lastSpawnTime = now;
-        }
-    }
-
-    spawnNextEnemy() {
-        if (this.spawnQueue.length === 0 || this.waveConfig.spawnPoints.length === 0) return;
-        
-        const shipType = this.spawnQueue.shift();
-        const spawnPoint = this.getRandomSpawnPoint();
-        
-        if (!spawnPoint) {
-            console.log('❌ Aucun point de spawn disponible');
-            return;
-        }
-        
-        // Créer le bateau selon son type
-        let ship;
-        switch (shipType) {
-            case 'basic':
-                ship = ShipFactory.createBasicShip(spawnPoint.x, spawnPoint.y);
-                break;
-            case 'fast':
-                ship = ShipFactory.createFastShip(spawnPoint.x, spawnPoint.y);
-                break;
-            case 'heavy':
-                ship = ShipFactory.createHeavyShip(spawnPoint.x, spawnPoint.y);
-                break;
-            case 'artillery':
-                ship = ShipFactory.createArtilleryShip(spawnPoint.x, spawnPoint.y);
-                break;
-            default:
-                ship = ShipFactory.createBasicShip(spawnPoint.x, spawnPoint.y);
-        }
-        
-        this.enemyShips.push(ship);
-        console.log(`🚢 ${shipType} spawné à (${spawnPoint.x}, ${spawnPoint.y})`);
     }
 
     getRandomSpawnPoint() {
@@ -299,9 +307,10 @@ export class WaveManager {
 
     hasShipFled(ship) {
         // Vérifier si le bateau a atteint le bord de la carte (fuite)
-        const margin = 2;
+        // Empêcher la sortie par le bas et les côtés
+        const margin = 1;
         return (ship.x < -margin || ship.x > this.grid.width + margin ||
-                ship.y < -margin || ship.y > this.grid.height + margin);
+                ship.y > this.grid.height + margin || ship.y < -margin);
     }
 
     checkWaveEnd(now) {
@@ -309,7 +318,7 @@ export class WaveManager {
         
         // Conditions de fin de vague
         const timeExpired = waveTimeElapsed >= this.waveDuration;
-        const noMoreEnemies = this.enemyShips.length === 0 && this.spawnQueue.length === 0;
+        const noMoreEnemies = this.enemyShips.length === 0; // Plus de spawnQueue
         
         if (timeExpired || noMoreEnemies) {
             this.endWave(timeExpired ? 'timeout' : 'cleared');
@@ -377,6 +386,10 @@ export class WaveManager {
     clearAllEnemies() {
         this.enemyShips.forEach(ship => ship.destroy());
         this.enemyShips = [];
+        
+        this.landUnits.forEach(unit => unit.active = false);
+        this.landUnits = [];
+        
         this.spawnQueue = [];
         console.log('💀 Tous les ennemis éliminés');
     }
@@ -389,10 +402,60 @@ export class WaveManager {
             ship.render(ctx, renderer);
         });
         
-        // Interface de vague
-        if (this.waveActive) {
-            this.renderWaveUI(ctx, renderer);
+        // Rendre toutes les unités terrestres
+        this.landUnits.forEach(unit => {
+            if (unit.render && typeof unit.render === 'function') {
+                unit.render(ctx, renderer);
+            } else {
+                // Rendu basique pour les unités sans méthode render complète
+                this.renderBasicUnit(ctx, renderer, unit);
+            }
+        });
+        
+        // Interface de vague supprimée du canvas - maintenant dans l'UI à droite
+    }
+
+    renderBasicUnit(ctx, renderer, unit) {
+        if (!unit.active) return;
+        
+        const screenPos = renderer.gridToScreen(unit.x, unit.y);
+        const cellSize = renderer.cellSize;
+        const unitSize = cellSize * unit.size;
+        
+        ctx.save();
+        ctx.translate(screenPos.x, screenPos.y);
+        
+        // Corps de l'unité
+        ctx.fillStyle = unit.color;
+        if (unit.type === 'tank') {
+            // Tank rectangulaire
+            ctx.fillRect(-unitSize/2, -unitSize/2, unitSize, unitSize);
+            // Canon du tank
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(-unitSize/4, -unitSize/8, unitSize/2, unitSize/4);
+        } else {
+            // Infanterie circulaire
+            ctx.beginPath();
+            ctx.arc(0, 0, unitSize/2, 0, Math.PI * 2);
+            ctx.fill();
         }
+        
+        ctx.restore();
+        
+        // Barre de vie basique
+        const healthRatio = unit.health / unit.maxHealth;
+        const barWidth = unitSize * 0.8;
+        const barHeight = 3;
+        const barY = screenPos.y - unitSize/2 - 8;
+        
+        // Fond de la barre de vie
+        ctx.fillStyle = '#666666';
+        ctx.fillRect(screenPos.x - barWidth / 2, barY, barWidth, barHeight);
+        
+        // Barre de vie
+        const healthColor = healthRatio > 0.6 ? '#00ff00' : (healthRatio > 0.3 ? '#ffff00' : '#ff0000');
+        ctx.fillStyle = healthColor;
+        ctx.fillRect(screenPos.x - barWidth / 2, barY, barWidth * healthRatio, barHeight);
     }
 
     renderWaveUI(ctx, renderer) {
@@ -404,11 +467,11 @@ export class WaveManager {
         
         // Fond
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(x, y, 180, 80);
+        ctx.fillRect(x, y, 180, 100);
         
         ctx.strokeStyle = '#ff6b35';
         ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, 180, 80);
+        ctx.strokeRect(x, y, 180, 100);
         
         // Texte
         ctx.fillStyle = '#ffffff';
@@ -419,7 +482,8 @@ export class WaveManager {
         const timeSeconds = Math.ceil(remainingTime / 1000);
         ctx.fillText(`Temps: ${timeSeconds}s`, x + 10, y + 40);
         
-        ctx.fillText(`Ennemis: ${this.enemyShips.length}`, x + 10, y + 60);
+        ctx.fillText(`Bateaux: ${this.enemyShips.length}`, x + 10, y + 60);
+        ctx.fillText(`Troupes: ${this.landUnits.length}`, x + 10, y + 80);
     }
 
     // Utilitaires
@@ -449,6 +513,13 @@ export class WaveManager {
             currentWave: this.currentWave,
             waveActive: this.waveActive,
             enemyShips: this.enemyShips.map(ship => ship.serialize()),
+            landUnits: this.landUnits.map(unit => ({
+                x: unit.x,
+                y: unit.y,
+                type: unit.type,
+                health: unit.health,
+                active: unit.active
+            })),
             spawnQueue: this.spawnQueue || []
         };
     }

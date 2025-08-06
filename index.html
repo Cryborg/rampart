@@ -35,6 +35,28 @@
             <canvas id="gameCanvas" width="768" height="768"></canvas>
             
             <div id="gameUI">
+                <div id="waveInfo" class="ui-panel">
+                    <h3>État de la vague</h3>
+                    <div class="wave-stats">
+                        <div class="stat-row">
+                            <span>Vague:</span>
+                            <span id="currentWave">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Temps:</span>
+                            <span id="waveTimer">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Bateaux:</span>
+                            <span id="enemyShips">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Troupes:</span>
+                            <span id="landUnits">0</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="currentPiece" class="ui-panel">
                     <h3>Pièce actuelle</h3>
                     <canvas id="piecePreview" width="128" height="128"></canvas>

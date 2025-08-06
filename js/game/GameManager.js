@@ -134,9 +134,10 @@ export class GameManager {
             this.cannonPreviewPos = gridPos;
         }
         
-        // Update combat system during combat phase
-        if (this.gameState.currentState === 'COMBAT' && this.combatSystem) {
-            this.combatSystem.handleMouseMove(gridPos.x, gridPos.y);
+        // Stocker la position exacte de la souris pour la croix de visée en combat (libre)
+        if (this.gameState.currentState === 'COMBAT') {
+            this.combatCrosshairScreenPos = { x: canvasX, y: canvasY };
+            this.combatCrosshairGridPos = gridPos; // Position de grille pour le tir
         }
     }
 
@@ -165,11 +166,10 @@ export class GameManager {
         if (!this.combatSystem) return;
         
         if (button === 0) { // Clic gauche
-            // Vérifier si on clique sur un canon pour viser/tirer
+            // Tir direct vers la case cliquée
             const player = this.players[this.currentPlayer];
             this.combatSystem.handleCannonClick(gridPos.x, gridPos.y, player.id);
         } else if (button === 2) { // Clic droit
-            // Annuler la visée
             this.combatSystem.handleRightClick();
         }
     }
@@ -214,11 +214,13 @@ export class GameManager {
                     console.log(`🎯 Canon placé à (${gridPos.x}, ${gridPos.y})`);
                     
                     // Ajouter à la liste des canons du joueur
-                    this.players[this.currentPlayer].cannons.push({
+                    const newCannon = {
                         x: gridPos.x,
                         y: gridPos.y,
                         firing: false
-                    });
+                    };
+                    this.players[this.currentPlayer].cannons.push(newCannon);
+                    console.log(`🎯 Canon ajouté à la liste du joueur ${this.currentPlayer}: (${gridPos.x}, ${gridPos.y}). Total: ${this.players[this.currentPlayer].cannons.length}`);
                     
                     // Incrémenter le compteur de cette phase
                     this.cannonsPlacedThisPhase++;
@@ -541,6 +543,12 @@ export class GameManager {
     startCombatPhase() {
         console.log('⚔️ Phase de combat démarrée');
         
+        // Debug: lister tous les canons des joueurs
+        this.players.forEach((player, idx) => {
+            console.log(`👤 Joueur ${player.id} - ${player.cannons.length} canons:`, 
+                player.cannons.map(c => `(${c.x},${c.y})`).join(', '));
+        });
+        
         if (this.waveManager) {
             // Démarrer une nouvelle vague d'ennemis
             this.waveManager.startWave();
@@ -666,6 +674,17 @@ export class GameManager {
         this.uiManager.updateRound(this.gameState.round);
         this.uiManager.updatePhase(this.gameState.currentState, this.gameState.phaseTimeLeft);
         
+        // Mettre à jour les infos de vague
+        if (this.waveManager) {
+            const waveStatus = this.waveManager.getWaveStatus();
+            this.uiManager.updateWaveInfo({
+                currentWave: waveStatus.currentWave,
+                timeRemaining: waveStatus.timeRemaining,
+                enemyShips: waveStatus.enemyCount,
+                landUnits: this.waveManager.landUnits ? this.waveManager.landUnits.length : 0
+            });
+        }
+        
         // Update piece preview
         if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
             this.renderPiecePreview(player.currentPiece);
@@ -720,6 +739,9 @@ export class GameManager {
         // Rendre les systèmes de combat
         if (this.combatSystem && this.gameState.currentState === 'COMBAT') {
             this.combatSystem.render(this.ctx, this.renderer);
+            
+            // Afficher la croix de visée
+            this.renderCombatCrosshair();
         }
         
         if (this.waveManager) {
@@ -728,25 +750,29 @@ export class GameManager {
         
         // Timer très visible en phase REPAIR
         if (this.gameState.currentState === 'REPAIR' && this.repairTimeLeft !== undefined) {
+            // Positionnement à droite
+            const uiX = this.canvas.width - 220;
+            const uiY = 10;
+            
             // Fond semi-transparent pour le timer
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            this.ctx.fillRect(this.canvas.width / 2 - 100, 10, 200, 60);
+            this.ctx.fillRect(uiX, uiY, 200, 60);
             
             // Bordure
             this.ctx.strokeStyle = '#ff6b35';
             this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(this.canvas.width / 2 - 100, 10, 200, 60);
+            this.ctx.strokeRect(uiX, uiY, 200, 60);
             
             // Texte du timer
             this.ctx.fillStyle = this.repairTimeLeft <= 5 ? '#ff0000' : '#ffffff'; // Rouge si moins de 5s
             this.ctx.font = 'bold 32px Arial';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText(`${Math.ceil(this.repairTimeLeft)}s`, this.canvas.width / 2, 45);
+            this.ctx.fillText(`${Math.ceil(this.repairTimeLeft)}s`, uiX + 100, uiY + 35);
             
             // Label
             this.ctx.fillStyle = '#ffff00';
             this.ctx.font = 'bold 14px Arial';
-            this.ctx.fillText('RÉPARATION', this.canvas.width / 2, 62);
+            this.ctx.fillText('RÉPARATION', uiX + 100, uiY + 52);
             
             // Reset text align
             this.ctx.textAlign = 'left';
@@ -758,35 +784,39 @@ export class GameManager {
             const cannonsToPlace = this.calculateCannonsToPlace();
             const currentCannons = player.cannons.length;
             
+            // Positionnement à droite
+            const uiX = this.canvas.width - 300;
+            const uiY = 10;
+            
             // Fond semi-transparent
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            this.ctx.fillRect(this.canvas.width / 2 - 140, 10, 280, 70);
+            this.ctx.fillRect(uiX, uiY, 280, 70);
             
             // Bordure
             this.ctx.strokeStyle = '#ffd700';
             this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(this.canvas.width / 2 - 140, 10, 280, 70);
+            this.ctx.strokeRect(uiX, uiY, 280, 70);
             
             // Texte principal
             this.ctx.fillStyle = '#ffd700';
             this.ctx.font = 'bold 24px Arial';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('PLACEMENT CANONS', this.canvas.width / 2, 35);
+            this.ctx.fillText('PLACEMENT CANONS', uiX + 140, uiY + 25);
             
             // Compteur de canons à placer
             const cannonCountColor = cannonsToPlace === 0 ? '#ff0000' : '#00ff00';
             this.ctx.fillStyle = cannonCountColor;
             this.ctx.font = 'bold 16px Arial';
             if (cannonsToPlace > 0) {
-                this.ctx.fillText(`${cannonsToPlace} canons à placer`, this.canvas.width / 2, 55);
+                this.ctx.fillText(`${cannonsToPlace} canons à placer`, uiX + 140, uiY + 45);
             } else {
-                this.ctx.fillText(`Aucun canon à placer`, this.canvas.width / 2, 55);
+                this.ctx.fillText(`Aucun canon à placer`, uiX + 140, uiY + 45);
             }
             
             // Instructions
             this.ctx.fillStyle = '#ffffff';
             this.ctx.font = '10px Arial';
-            this.ctx.fillText('Clic gauche: placer • Clic droit: supprimer • Entrée: combat', this.canvas.width / 2, 70);
+            this.ctx.fillText('Clic gauche: placer • Clic droit: supprimer • Entrée: combat', uiX + 140, uiY + 60);
             
             // Reset text align
             this.ctx.textAlign = 'left';
@@ -794,111 +824,57 @@ export class GameManager {
         
         // Indicateur de phase COMBAT
         if (this.gameState.currentState === 'COMBAT') {
+            // Positionnement à droite
+            const uiX = this.canvas.width - 320;
+            const uiY = 10;
+            
             // Fond semi-transparent
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            this.ctx.fillRect(this.canvas.width / 2 - 100, 10, 200, 50);
+            this.ctx.fillRect(uiX, uiY, 300, 70);
             
             // Bordure
             this.ctx.strokeStyle = '#ff0000';
             this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(this.canvas.width / 2 - 100, 10, 200, 50);
+            this.ctx.strokeRect(uiX, uiY, 300, 70);
             
             // Texte
             this.ctx.fillStyle = '#ff0000';
             this.ctx.font = 'bold 24px Arial';
             this.ctx.textAlign = 'center';
-            this.ctx.fillText('COMBAT !', this.canvas.width / 2, 40);
+            this.ctx.fillText('COMBAT !', uiX + 150, uiY + 30);
+            
+            // Instructions
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '12px Arial';
+            this.ctx.fillText('Cliquez n\'importe où pour tirer', uiX + 150, uiY + 50);
+            this.ctx.fillText('Rotation automatique des canons', uiX + 150, uiY + 65);
             
             // Reset text align
             this.ctx.textAlign = 'left';
         }
         
-        // Debug info pour débogage compteur canons
-        this.renderDebugInfo();
     }
 
-    renderDebugInfo() {
-        // Compter les cases cannonZone en temps réel
-        let cannonZoneCells = 0;
-        let landCells = 0;
-        let cannonCells = 0;
+    renderCombatCrosshair() {
+        if (!this.combatCrosshairScreenPos) return;
         
-        for (let y = 0; y < this.grid.height; y++) {
-            for (let x = 0; x < this.grid.width; x++) {
-                const cell = this.grid.getCell(x, y);
-                if (cell) {
-                    if (cell.type === 'land') landCells++;
-                    if (cell.type === 'cannon') cannonCells++;
-                    if (cell.cannonZone && cell.type === 'land') cannonZoneCells++;
-                }
-            }
-        }
+        // Utiliser directement les coordonnées écran pour un viseur libre
+        const screenPos = this.combatCrosshairScreenPos;
         
-        const player = this.players[this.currentPlayer];
-        const cannonsToPlace = this.calculateCannonsToPlace();
-        const currentCannons = player.cannons.length;
+        this.ctx.strokeStyle = '#00ff00';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
         
-        // Fond semi-transparent pour debug
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        this.ctx.fillRect(10, 10, 300, 160);
+        // Croix de visée simple
+        const size = 8;
+        this.ctx.moveTo(screenPos.x - size, screenPos.y);
+        this.ctx.lineTo(screenPos.x + size, screenPos.y);
+        this.ctx.moveTo(screenPos.x, screenPos.y - size);
+        this.ctx.lineTo(screenPos.x, screenPos.y + size);
         
-        // Bordure
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(10, 10, 300, 160);
-        
-        // Textes debug
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = '12px monospace';
-        this.ctx.textAlign = 'left';
-        
-        let yPos = 25;
-        const lineHeight = 14;
-        
-        this.ctx.fillText(`État: ${this.gameState.currentState}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#ffd700';
-        this.ctx.fillText(`Cases cannonZone: ${cannonZoneCells}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#65a30d';
-        this.ctx.fillText(`Cases land: ${landCells}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#7c2d12';
-        this.ctx.fillText(`Cases canon: ${cannonCells}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#ff6b35';
-        this.ctx.fillText(`Canons placés: ${currentCannons}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#00ff00';
-        this.ctx.fillText(`Canons à placer: ${cannonsToPlace}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#ffff00';
-        this.ctx.fillText(`Phase: ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.fillText(`Ratio: ${GAME_CONFIG.GAMEPLAY.CANNON_RATIO}`, 15, yPos);
-        yPos += lineHeight;
-        
-        const calculation = GAME_CONFIG.GAMEPLAY.CANNON_RATIO * (cannonZoneCells / 4);
-        this.ctx.fillText(`Calcul: ${calculation.toFixed(2)}`, 15, yPos);
-        yPos += lineHeight;
-        
-        this.ctx.fillText(`Floor: ${Math.floor(calculation)}`, 15, yPos);
-        yPos += lineHeight;
-        
-        const finalResult = Math.max(GAME_CONFIG.GAMEPLAY.MIN_CANNONS, Math.floor(calculation));
-        this.ctx.fillText(`Final: ${finalResult}`, 15, yPos);
-        
-        // Reset text align
-        this.ctx.textAlign = 'left';
+        this.ctx.stroke();
     }
+
 
     handleResize() {
         if (this.renderer) {

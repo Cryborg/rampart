@@ -89,7 +89,8 @@ export class Projectile {
         // pour gérer les dégâts et effets
         console.log(`💥 Impact à (${x.toFixed(1)}, ${y.toFixed(1)}) - Dégâts: ${this.damage}`);
         
-        this.destroy('impact');
+        // Désactiver immédiatement le projectile
+        this.active = false;
     }
 
     destroy(reason = 'unknown') {

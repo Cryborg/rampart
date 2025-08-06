@@ -12,8 +12,7 @@ export class CombatSystem {
         
         // Configuration du combat
         this.config = {
-            cannonRange: 12, // Portée des canons en cases
-            cannonCooldown: 2000, // Temps entre tirs (ms)
+            cannonCooldown: 2000, // Temps entre tirs (2 secondes)
             wallDestruction: true, // Les murs peuvent être détruits
             friendlyFire: true, // Tir ami activé
             explosionRadius: 1.5, // Rayon d'explosion en cases
@@ -23,74 +22,49 @@ export class CombatSystem {
         // État des canons (cooldowns)
         this.cannonCooldowns = new Map();
         
-        // Interface de visée
-        this.aimingMode = false;
-        this.selectedCannon = null;
-        this.crosshairPos = { x: 0, y: 0 };
+        // Liste des canons du joueur pour gérer la rotation
+        this.cannonFireIndex = 0;
         
         console.log('⚔️ CombatSystem initialisé');
     }
 
     /**
-     * Activer le mode de visée pour un canon
+     * Tirer vers une position avec le prochain canon disponible
      */
-    startAiming(cannonX, cannonY, playerId) {
-        const cannon = this.findCannonAt(cannonX, cannonY, playerId);
-        if (!cannon) {
-            console.log(`❌ Aucun canon trouvé à (${cannonX}, ${cannonY})`);
+    fireAtPosition(targetX, targetY, playerId) {
+        const player = this.gameManager.players.find(p => p.id === playerId);
+        if (!player || player.cannons.length === 0) {
+            console.log('❌ Aucun canon disponible');
             return false;
         }
 
-        if (this.isCannonOnCooldown(cannon)) {
-            console.log(`⏰ Canon en rechargement`);
-            return false;
+        // Trouver le prochain canon qui peut tirer
+        let attempts = 0;
+        while (attempts < player.cannons.length) {
+            const cannonIndex = this.cannonFireIndex % player.cannons.length;
+            const cannon = player.cannons[cannonIndex];
+            
+            this.cannonFireIndex++;
+            attempts++;
+            
+            if (!this.isCannonOnCooldown(cannon)) {
+                // Ce canon peut tirer !
+                this.fireFromCannon(cannon, targetX, targetY);
+                return true;
+            }
         }
-
-        this.aimingMode = true;
-        this.selectedCannon = cannon;
-        console.log(`🎯 Mode visée activé pour canon à (${cannonX}, ${cannonY})`);
-        return true;
-    }
-
-    /**
-     * Arrêter le mode de visée
-     */
-    stopAiming() {
-        this.aimingMode = false;
-        this.selectedCannon = null;
-        console.log('🎯 Mode visée désactivé');
-    }
-
-    /**
-     * Mettre à jour la position du curseur de visée
-     */
-    updateCrosshair(gridX, gridY) {
-        if (!this.aimingMode || !this.selectedCannon) return;
         
-        this.crosshairPos.x = gridX;
-        this.crosshairPos.y = gridY;
+        console.log('⏰ Tous les canons sont en rechargement');
+        return false;
     }
 
     /**
-     * Tirer avec le canon sélectionné vers la position du curseur
+     * Tirer depuis un canon spécifique
      */
-    fire() {
-        if (!this.aimingMode || !this.selectedCannon) return false;
-
-        const cannon = this.selectedCannon;
-        const targetX = this.crosshairPos.x;
-        const targetY = this.crosshairPos.y;
-
-        // Vérifier la portée
-        const distance = this.getDistance(cannon.x + 1, cannon.y + 1, targetX, targetY);
-        if (distance > this.config.cannonRange) {
-            console.log(`❌ Cible hors de portée (${distance.toFixed(1)} > ${this.config.cannonRange})`);
-            return false;
-        }
-
-        // Créer le projectile
+    fireFromCannon(cannon, targetX, targetY) {
+        // Créer le projectile depuis le centre du canon 2x2
         const projectile = new Projectile(
-            cannon.x + 1, cannon.y + 1, // Centre du canon 2x2
+            cannon.x + 1, cannon.y + 1,
             targetX, targetY,
             {
                 speed: 15,
@@ -112,11 +86,7 @@ export class CombatSystem {
         cannon.firing = true;
         setTimeout(() => { cannon.firing = false; }, 200);
         
-        // Arrêter la visée après le tir
-        this.stopAiming();
-        
-        console.log(`💥 Tir depuis (${cannon.x}, ${cannon.y}) vers (${targetX}, ${targetY})`);
-        return true;
+        console.log(`💥 Canon (${cannon.x}, ${cannon.y}) tire vers (${targetX}, ${targetY})`);
     }
 
     /**
@@ -136,6 +106,9 @@ export class CombatSystem {
         if (this.renderer) {
             this.renderer.addExplosion(gridX, gridY);
         }
+        
+        // IMPORTANT: Désactiver le projectile pour qu'il s'arrête
+        projectile.active = false;
     }
 
     /**
@@ -147,20 +120,57 @@ export class CombatSystem {
         const startY = Math.floor(centerY - radius);
         const endY = Math.ceil(centerY + radius);
 
+        // D'abord vérifier s'il y a un bateau touché au centre de l'explosion
+        const shipHitAtCenter = this.damageEnemyShipsAt(centerX, centerY, damage);
+        
+        // Si un bateau est touché, on fait une explosion réduite, sinon explosion complète
+        const explosionRadius = shipHitAtCenter ? radius * 0.5 : radius;
+
         for (let x = startX; x <= endX; x++) {
             for (let y = startY; y <= endY; y++) {
                 if (!this.grid.isValidPosition(x, y)) continue;
 
                 const distance = this.getDistance(centerX, centerY, x, y);
-                if (distance > radius) continue;
+                if (distance > explosionRadius) continue;
 
                 // Calculer les dégâts selon la distance (plus faible en périphérie)
-                const damageRatio = 1 - (distance / radius);
+                const damageRatio = 1 - (distance / explosionRadius);
                 const actualDamage = Math.ceil(damage * damageRatio);
 
+                // Dégâts sur la grille
                 this.damageCellAt(x, y, actualDamage);
+                
+                // Vérifier s'il y a des bateaux ennemis dans la zone d'explosion (sauf au centre déjà vérifié)
+                if (distance > 0.5) {
+                    this.damageEnemyShipsAt(x, y, actualDamage);
+                }
             }
         }
+    }
+
+    /**
+     * Endommager les bateaux ennemis à une position donnée
+     */
+    damageEnemyShipsAt(x, y, damage) {
+        // Obtenir la liste des bateaux ennemis depuis le WaveManager
+        const waveManager = this.gameManager.waveManager;
+        if (!waveManager || !waveManager.enemyShips) return false;
+
+        let shipHit = false;
+        for (let ship of waveManager.enemyShips) {
+            if (!ship.active) continue;
+            
+            // Vérifier si le bateau est dans cette zone (avec sa taille)
+            const shipRadius = ship.size / 2; // Rayon basé sur la taille
+            const distance = this.getDistance(ship.x, ship.y, x, y);
+            
+            if (distance <= shipRadius) {
+                console.log(`🎯 Bateau touché ! Distance: ${distance.toFixed(1)}, Radius: ${shipRadius}`);
+                ship.takeDamage(damage);
+                shipHit = true;
+            }
+        }
+        return shipHit;
     }
 
     /**
@@ -323,6 +333,79 @@ export class CombatSystem {
     }
 
     /**
+     * Rendre tous les éléments du combat
+     */
+    render(ctx, renderer) {
+        // Rendre les projectiles
+        this.projectiles.forEach(projectile => {
+            projectile.render(ctx, renderer);
+        });
+        
+        // Rendre l'interface de visée
+        if (this.aimingMode && this.selectedCannon) {
+            this.renderAimingInterface(ctx, renderer);
+        }
+        
+        // Rendre les indicateurs de canons (pour aider le joueur)
+        this.renderCannonIndicators(ctx, renderer);
+    }
+
+    /**
+     * Rendre des indicateurs sur les canons cliquables
+     */
+    renderCannonIndicators(ctx, renderer) {
+        const players = this.gameManager.players;
+        const currentPlayerId = this.gameManager.players[this.gameManager.currentPlayer].id;
+        
+        players.forEach(player => {
+            if (player.id !== currentPlayerId) return; // Seulement les canons du joueur actuel
+            
+            player.cannons.forEach(cannon => {
+                const isOnCooldown = this.isCannonOnCooldown(cannon);
+                const screenPos = renderer.gridToScreen(cannon.x, cannon.y);
+                const cellSize = renderer.cellSize;
+                
+                // Bordure autour du canon
+                ctx.strokeStyle = isOnCooldown ? '#666666' : '#00ff00';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    screenPos.x, 
+                    screenPos.y, 
+                    cellSize * 2 - 1, // Canon 2x2
+                    cellSize * 2 - 1
+                );
+                
+                // Indicateur de cooldown
+                if (isOnCooldown) {
+                    const key = `${cannon.x}-${cannon.y}`;
+                    const cooldownEnd = this.cannonCooldowns.get(key);
+                    const remaining = Math.max(0, cooldownEnd - Date.now());
+                    const percentage = remaining / this.config.cannonCooldown;
+                    
+                    // Barre de cooldown
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.fillRect(
+                        screenPos.x,
+                        screenPos.y + cellSize * 2 - 4,
+                        (cellSize * 2 - 1) * (1 - percentage),
+                        4
+                    );
+                }
+                
+                // Indicateur "CLICK ME" si pas en cooldown et pas en mode visée
+                if (!isOnCooldown && !this.aimingMode) {
+                    ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('CLIC', screenPos.x + cellSize, screenPos.y - 5);
+                }
+            });
+        });
+        
+        ctx.textAlign = 'left'; // Reset
+    }
+
+    /**
      * Rendre l'interface de visée
      */
     renderAimingInterface(ctx, renderer) {
@@ -377,12 +460,17 @@ export class CombatSystem {
             if (playerId && player.id !== playerId) continue;
             
             for (let cannon of player.cannons) {
+                // Les canons sont stockés par leur coin supérieur gauche
+                // Vérifier si le clic est dans la zone 2x2 du canon
                 if (x >= cannon.x && x < cannon.x + 2 && 
                     y >= cannon.y && y < cannon.y + 2) {
+                    console.log(`🎯 Canon trouvé: position (${cannon.x}, ${cannon.y}), clic à (${x}, ${y})`);
                     return cannon;
                 }
             }
         }
+        console.log(`❌ Aucun canon à (${x}, ${y}). Canons disponibles:`, 
+            players.flatMap(p => p.cannons.map(c => `(${c.x},${c.y})`)).join(', '));
         return null;
     }
 
@@ -409,28 +497,17 @@ export class CombatSystem {
     // Interface publique pour GameManager
 
     handleCannonClick(gridX, gridY, playerId) {
-        if (this.aimingMode) {
-            // En mode visée, cliquer tire
-            this.updateCrosshair(gridX, gridY);
-            return this.fire();
-        } else {
-            // Pas en mode visée, sélectionner le canon
-            return this.startAiming(gridX, gridY, playerId);
-        }
+        // Tir direct : cliquer n'importe où tire avec le prochain canon disponible
+        return this.fireAtPosition(gridX, gridY, playerId);
     }
 
     handleRightClick() {
-        if (this.aimingMode) {
-            this.stopAiming();
-            return true;
-        }
+        // Plus besoin du clic droit en mode tir direct
         return false;
     }
 
     handleMouseMove(gridX, gridY) {
-        if (this.aimingMode) {
-            this.updateCrosshair(gridX, gridY);
-        }
+        // Plus besoin de suivre la souris en mode tir direct
     }
 
     // Nettoyage

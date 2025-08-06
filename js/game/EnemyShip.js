@@ -25,6 +25,8 @@ export class EnemyShip {
         this.pathIndex = 0;
         this.lastFireTime = 0;
         this.isMoving = false;
+        this.hasLanded = false; // A déjà débarqué des troupes
+        this.lastLandingTime = 0;
         
         // IA
         this.aiState = 'seeking'; // seeking, attacking, fleeing, destroyed
@@ -50,6 +52,9 @@ export class EnemyShip {
 
     update(deltaTime, gameManager) {
         if (!this.active) return;
+        
+        // Stocker la référence au gameManager pour l'évitement
+        this.gameManager = gameManager;
         
         // Mettre à jour l'IA
         this.updateAI(deltaTime, gameManager);
@@ -101,12 +106,21 @@ export class EnemyShip {
         
         if (closestCastle) {
             this.target = closestCastle;
-            this.calculatePathTo(closestCastle.x, closestCastle.y, gameManager.grid);
-            this.aiState = 'attacking';
-            console.log(`🎯 Bateau trouve cible à (${closestCastle.x}, ${closestCastle.y})`);
+            // Naviguer vers le rivage le plus proche du château, pas directement au château
+            const shoreTarget = this.findNearestShorePoint(closestCastle.x, closestCastle.y, gameManager.grid);
+            // Vérifier que le point de rivage est bien dans l'eau
+            const shoreCell = gameManager.grid.getCell(shoreTarget.x, shoreTarget.y);
+            if (shoreCell && shoreCell.type === 'water') {
+                this.calculatePathTo(shoreTarget.x, shoreTarget.y, gameManager.grid);
+                this.aiState = 'attacking';
+                console.log(`🎯 Bateau navigue vers le rivage (${shoreTarget.x}, ${shoreTarget.y}) pour atteindre château (${closestCastle.x}, ${closestCastle.y})`);
+            } else {
+                console.log(`⚠️ Point de rivage invalide (${shoreTarget.x}, ${shoreTarget.y}), patrouille`);
+                this.patrolTowardsShore(gameManager.grid);
+            }
         } else {
-            // Patrouiller aléatoirement
-            this.patrol(gameManager.grid);
+            // Patrouiller vers la côte
+            this.patrolTowardsShore(gameManager.grid);
         }
     }
 
@@ -116,24 +130,35 @@ export class EnemyShip {
             return;
         }
         
+        // Vérifier si on est proche du rivage pour débarquer
+        const shoreDistance = this.getDistanceToShore(gameManager.grid);
+        if (shoreDistance <= 1.5 && !this.hasLanded) {
+            this.attemptLanding(gameManager);
+            return;
+        }
+        
         const distance = this.getDistance(this.x, this.y, this.target.x, this.target.y);
         
-        if (distance <= this.range) {
-            // À portée de tir, arrêter de bouger et tirer
+        if (distance <= this.range && this.hasLanded) {
+            // À portée de tir et a déjà débarqué, arrêter de bouger et tirer
             this.path = [];
             this.isMoving = false;
         } else if (distance > this.searchRadius) {
             // Cible trop loin, chercher une nouvelle cible
             this.target = null;
             this.aiState = 'seeking';
-        } else if (this.path.length === 0) {
-            // Recalculer le chemin vers la cible
-            this.calculatePathTo(this.target.x, this.target.y, gameManager.grid);
+        } else if (this.path.length === 0 && !this.hasLanded) {
+            // Recalculer le chemin vers la cible (rivage) uniquement si pas encore débarqué
+            const shoreTarget = this.findNearestShorePoint(this.target.x, this.target.y, gameManager.grid);
+            const shoreCell = gameManager.grid.getCell(shoreTarget.x, shoreTarget.y);
+            if (shoreCell && shoreCell.type === 'water') {
+                this.calculatePathTo(shoreTarget.x, shoreTarget.y, gameManager.grid);
+            }
         }
         
         // Vérifier si la cible est détruite
         const cell = gameManager.grid.getCell(this.target.x, this.target.y);
-        if (!cell || cell.type !== CELL_TYPES.CASTLE_CORE) {
+        if (!cell || cell.type !== 'castle-core') {
             this.target = null;
             this.aiState = 'seeking';
         }
@@ -160,6 +185,271 @@ export class EnemyShip {
             
             this.calculatePathTo(targetX, targetY, grid);
         }
+    }
+
+    patrolTowardsShore(grid) {
+        // Se diriger vers la côte gauche pour chercher un point de débarquement
+        if (this.path.length === 0) {
+            const shoreX = Math.floor(grid.width * 0.6) + Math.floor(Math.random() * 5) - 2;
+            const targetY = this.y + (Math.random() - 0.5) * 8;
+            this.calculatePathTo(shoreX, Math.max(1, Math.min(grid.height - 2, targetY)), grid);
+        }
+    }
+
+    findNearestShorePoint(castleX, castleY, grid) {
+        // Trouver le point de rivage le plus proche du château pour le débarquement
+        let bestShorePoint = null;
+        let bestDistance = Infinity;
+        
+        // Chercher le long de la côte (zone de transition terre/eau)
+        const coastStartX = Math.floor(grid.width * 0.5);
+        const coastEndX = Math.floor(grid.width * 0.7);
+        
+        for (let x = coastStartX; x < coastEndX; x++) {
+            for (let y = 1; y < grid.height - 1; y++) {
+                const currentCell = grid.getCell(x, y);
+                const leftCell = grid.getCell(x - 1, y);
+                
+                // Point de rivage = eau avec terre à gauche
+                if (currentCell && currentCell.type === 'water' && 
+                    leftCell && leftCell.type === 'land') {
+                    
+                    const distanceToTarget = this.getDistance(x, y, castleX, castleY);
+                    if (distanceToTarget < bestDistance) {
+                        bestDistance = distanceToTarget;
+                        bestShorePoint = { x, y };
+                    }
+                }
+            }
+        }
+        
+        // Si pas de point trouvé, chercher un point d'eau sûr près de la position actuelle
+        if (!bestShorePoint) {
+            // Chercher de l'eau près du bateau
+            for (let radius = 1; radius <= 5; radius++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        const checkX = Math.floor(this.x) + dx;
+                        const checkY = Math.floor(this.y) + dy;
+                        
+                        if (grid.isValidPosition(checkX, checkY)) {
+                            const cell = grid.getCell(checkX, checkY);
+                            if (cell && cell.type === 'water') {
+                                return { x: checkX, y: checkY };
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // En dernier recours, rester sur place
+            return { x: this.x, y: this.y };
+        }
+        
+        return bestShorePoint;
+    }
+
+    getDistanceToShore(grid) {
+        // Calculer la distance au rivage le plus proche
+        let minDistance = Infinity;
+        
+        // Chercher le long de la côte
+        const coastStartX = Math.floor(grid.width * 0.5);
+        const coastEndX = Math.floor(grid.width * 0.7);
+        
+        for (let x = coastStartX; x < coastEndX; x++) {
+            for (let y = 1; y < grid.height - 1; y++) {
+                const currentCell = grid.getCell(x, y);
+                const leftCell = grid.getCell(x - 1, y);
+                
+                // Point de rivage = eau avec terre à gauche
+                if (currentCell && currentCell.type === 'water' && 
+                    leftCell && leftCell.type === 'land') {
+                    
+                    const distance = this.getDistance(this.x, this.y, x, y);
+                    minDistance = Math.min(minDistance, distance);
+                }
+            }
+        }
+        
+        return minDistance;
+    }
+
+    attemptLanding(gameManager) {
+        const now = Date.now();
+        
+        // Cooldown entre débarquements (éviter le spam)
+        if (now - this.lastLandingTime < 5000) return;
+        
+        // Trouver le point de débarquement le plus proche
+        const landingPoint = this.findLandingPoint(gameManager.grid);
+        if (!landingPoint) {
+            console.log('🚢 Pas de point de débarquement trouvé');
+            return;
+        }
+        
+        // Créer les troupes selon le type de bateau
+        this.deployTroops(landingPoint, gameManager);
+        
+        this.hasLanded = true;
+        this.lastLandingTime = now;
+        
+        console.log(`🏃 Débarquement effectué à (${landingPoint.x}, ${landingPoint.y})`);
+    }
+
+    findLandingPoint(grid) {
+        // Chercher un point de terre adjacent à notre position
+        const searchRadius = 2;
+        
+        for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+            for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                const checkX = Math.floor(this.x + dx);
+                const checkY = Math.floor(this.y + dy);
+                
+                if (grid.isValidPosition(checkX, checkY)) {
+                    const cell = grid.getCell(checkX, checkY);
+                    if (cell && (cell.type === 'land' || cell.type === 'destroyed')) {
+                        return { x: checkX, y: checkY };
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    deployTroops(landingPoint, gameManager) {
+        const waveManager = gameManager.waveManager;
+        if (!waveManager) return;
+        
+        // Initialiser le tableau des unités terrestres si nécessaire
+        if (!waveManager.landUnits) {
+            waveManager.landUnits = [];
+        }
+        
+        // Nombre de troupes selon le type de bateau
+        let troopCount = 0;
+        let tankChance = 0;
+        
+        switch (this.type) {
+            case 'basic':
+                troopCount = 2 + Math.floor(Math.random() * 2); // 2-3 troupes
+                tankChance = 0.1; // 10% de chance de tank
+                break;
+            case 'fast':
+                troopCount = 1 + Math.floor(Math.random() * 2); // 1-2 troupes
+                tankChance = 0.05; // 5% de chance de tank
+                break;
+            case 'heavy':
+                troopCount = 3 + Math.floor(Math.random() * 3); // 3-5 troupes
+                tankChance = 0.25; // 25% de chance de tank
+                break;
+            case 'artillery':
+                troopCount = 2 + Math.floor(Math.random() * 2); // 2-3 troupes
+                tankChance = 0.4; // 40% de chance de tank
+                break;
+        }
+        
+        // Créer les troupes
+        for (let i = 0; i < troopCount; i++) {
+            // Position de débarquement avec légère variation
+            const troopX = landingPoint.x + (Math.random() - 0.5) * 2;
+            const troopY = landingPoint.y + (Math.random() - 0.5) * 2;
+            
+            let unit;
+            if (Math.random() < tankChance) {
+                // Créer un tank
+                unit = this.createTank(troopX, troopY);
+                console.log(`🚗 Tank débarqué à (${troopX.toFixed(1)}, ${troopY.toFixed(1)})`);
+            } else {
+                // Créer de l'infanterie
+                unit = this.createInfantry(troopX, troopY);
+                console.log(`🏃 Infanterie débarquée à (${troopX.toFixed(1)}, ${troopY.toFixed(1)})`);
+            }
+            
+            waveManager.landUnits.push(unit);
+        }
+    }
+
+    createInfantry(x, y) {
+        // Import dynamique pour éviter les dépendances circulaires
+        return new (class Infantry {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.type = 'infantry';
+                this.health = 2;
+                this.maxHealth = 2;
+                this.speed = 1.2;
+                this.size = 0.5;
+                this.damage = 1;
+                this.active = true;
+                this.target = null;
+                this.path = [];
+                this.pathIndex = 0;
+                this.isMoving = false;
+                this.aiState = 'seeking';
+                this.searchRadius = 20;
+                this.lastTargetSearch = 0;
+                this.targetSearchInterval = 3000;
+                this.color = '#8B4513';
+            }
+            
+            // Méthodes basiques pour le rendu et l'update - à compléter avec LandUnit
+            update(deltaTime, gameManager) { /* TODO: implémenter */ }
+            render(ctx, renderer) { /* TODO: implémenter */ }
+            takeDamage(damage) { 
+                this.health -= damage;
+                if (this.health <= 0) {
+                    this.active = false;
+                    return true;
+                }
+                return false;
+            }
+            getDistance(x1, y1, x2, y2) {
+                return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+            }
+        })(x, y);
+    }
+
+    createTank(x, y) {
+        return new (class Tank {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.type = 'tank';
+                this.health = 5;
+                this.maxHealth = 5;
+                this.speed = 0.8;
+                this.size = 0.8;
+                this.damage = 2;
+                this.active = true;
+                this.target = null;
+                this.path = [];
+                this.pathIndex = 0;
+                this.isMoving = false;
+                this.aiState = 'seeking';
+                this.searchRadius = 20;
+                this.lastTargetSearch = 0;
+                this.targetSearchInterval = 3000;
+                this.color = '#2d4a22';
+            }
+            
+            // Méthodes basiques pour le rendu et l'update - à compléter avec LandUnit
+            update(deltaTime, gameManager) { /* TODO: implémenter */ }
+            render(ctx, renderer) { /* TODO: implémenter */ }
+            takeDamage(damage) { 
+                this.health -= damage;
+                if (this.health <= 0) {
+                    this.active = false;
+                    return true;
+                }
+                return false;
+            }
+            getDistance(x1, y1, x2, y2) {
+                return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+            }
+        })(x, y);
     }
 
     calculatePathTo(targetX, targetY, grid) {
@@ -223,8 +513,9 @@ export class EnemyShip {
             }
         }
         
-        // Aucun chemin trouvé, se diriger directement vers la cible
-        return [{ x: endX, y: endY }];
+        // Aucun chemin trouvé, rester sur place plutôt que d'aller sur terre
+        console.log(`⚠️ Aucun chemin naval trouvé vers (${endX}, ${endY})`);
+        return [];
     }
 
     canNavigateTo(x, y, grid) {
@@ -233,8 +524,8 @@ export class EnemyShip {
         const cell = grid.getCell(x, y);
         if (!cell) return false;
         
-        // Les bateaux ne peuvent naviguer que sur l'eau
-        return cell.type === CELL_TYPES.WATER;
+        // Les bateaux ne peuvent naviguer que sur l'eau (simple !)
+        return cell.type === 'water';
     }
 
     calculateFleeRoute(grid) {
@@ -279,20 +570,68 @@ export class EnemyShip {
                 this.pathIndex = 0;
                 this.isMoving = false;
                 console.log('🚢 Bateau arrivé à destination');
+                return;
             }
             return;
         }
         
-        // Déplacement vers le point
+        // Déplacement vers le point avec évitement de collision
         const moveDistance = (this.speed * deltaTime) / 1000;
-        const moveX = (dx / distance) * moveDistance;
-        const moveY = (dy / distance) * moveDistance;
+        let moveX = (dx / distance) * moveDistance;
+        let moveY = (dy / distance) * moveDistance;
+        
+        // Vérifier les collisions avec autres bateaux et ajuster la trajectoire
+        const avoidanceVector = this.calculateAvoidance();
+        if (avoidanceVector) {
+            moveX += avoidanceVector.x * 0.3; // 30% de poids pour l'évitement
+            moveY += avoidanceVector.y * 0.3;
+        }
         
         this.x += moveX;
         this.y += moveY;
         
-        // Mettre à jour l'orientation
-        this.angle = Math.atan2(dy, dx);
+        // Les bateaux ne changent plus d'orientation
+    }
+    
+    calculateAvoidance() {
+        // Récupérer les autres bateaux depuis le gameManager
+        const waveManager = this.gameManager?.waveManager;
+        if (!waveManager || !waveManager.enemyShips) return null;
+        
+        let avoidX = 0;
+        let avoidY = 0;
+        let nearbyShips = 0;
+        
+        const avoidanceRadius = this.size * 1.5; // Distance minimale entre bateaux
+        
+        for (let otherShip of waveManager.enemyShips) {
+            if (otherShip === this || !otherShip.active) continue;
+            
+            const dx = this.x - otherShip.x;
+            const dy = this.y - otherShip.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < avoidanceRadius && distance > 0) {
+                // Force de répulsion inversement proportionnelle à la distance
+                const strength = (avoidanceRadius - distance) / avoidanceRadius;
+                avoidX += (dx / distance) * strength;
+                avoidY += (dy / distance) * strength;
+                nearbyShips++;
+            }
+        }
+        
+        if (nearbyShips > 0) {
+            // Normaliser le vecteur d'évitement
+            const length = Math.sqrt(avoidX * avoidX + avoidY * avoidY);
+            if (length > 0) {
+                return {
+                    x: (avoidX / length) * this.speed * 0.001, // Conversion en unité de mouvement
+                    y: (avoidY / length) * this.speed * 0.001
+                };
+            }
+        }
+        
+        return null;
     }
 
     updateCombat(deltaTime, gameManager) {
@@ -363,41 +702,42 @@ export class EnemyShip {
         
         const screenPos = renderer.gridToScreen(this.x, this.y);
         const cellSize = renderer.cellSize;
+        const shipScale = 4; // Agrandir x4
         
         ctx.save();
         ctx.translate(screenPos.x, screenPos.y);
-        ctx.rotate(this.angle);
+        // Ne plus utiliser l'angle de rotation - bateaux toujours orientés vers la gauche
         
-        // Corps du bateau
+        // Corps du bateau (4x plus grand) - orienté horizontalement vers la gauche
         ctx.fillStyle = this.color;
-        ctx.fillRect(-cellSize * 0.4, -cellSize * 0.2, cellSize * 0.8, cellSize * 0.4);
+        ctx.fillRect(-cellSize * 0.4 * shipScale, -cellSize * 0.2 * shipScale, 
+                     cellSize * 0.8 * shipScale, cellSize * 0.4 * shipScale);
         
-        // Proue du bateau
+        // Proue du bateau (4x plus grande) - pointant vers la gauche
         ctx.beginPath();
-        ctx.moveTo(cellSize * 0.4, 0);
-        ctx.lineTo(cellSize * 0.2, -cellSize * 0.15);
-        ctx.lineTo(cellSize * 0.2, cellSize * 0.15);
+        ctx.moveTo(-cellSize * 0.4 * shipScale, 0);
+        ctx.lineTo(-cellSize * 0.2 * shipScale, -cellSize * 0.15 * shipScale);
+        ctx.lineTo(-cellSize * 0.2 * shipScale, cellSize * 0.15 * shipScale);
         ctx.closePath();
         ctx.fill();
         
-        // Mât
+        // Mât vertical (4x plus grand)
         ctx.strokeStyle = '#654321';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 * shipScale;
         ctx.beginPath();
-        ctx.moveTo(0, -cellSize * 0.2);
-        ctx.lineTo(0, -cellSize * 0.6);
+        ctx.moveTo(0, -cellSize * 0.2 * shipScale);
+        ctx.lineTo(0, -cellSize * 0.6 * shipScale);
         ctx.stroke();
         
-        // Voile
-        if (this.isMoving) {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(-cellSize * 0.15, -cellSize * 0.6, cellSize * 0.3, cellSize * 0.3);
-        }
+        // Voile (4x plus grande) - toujours vers le haut
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-cellSize * 0.15 * shipScale, -cellSize * 0.6 * shipScale, 
+                     cellSize * 0.3 * shipScale, cellSize * 0.3 * shipScale);
         
         ctx.restore();
         
-        // Barre de vie
-        this.renderHealthBar(ctx, screenPos.x, screenPos.y - cellSize * 0.7, cellSize);
+        // Barre de vie (4x plus grande)
+        this.renderHealthBar(ctx, screenPos.x, screenPos.y - cellSize * 0.7 * shipScale, cellSize * shipScale);
         
         // Indicateur de cible (debug)
         if (this.target) {
@@ -457,44 +797,48 @@ export class ShipFactory {
     static createBasicShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'basic',
-            health: 3,
-            speed: 2,
+            health: 5, // Points de vie augmentés
+            speed: 0.72, // +20% (0.6 * 1.2 = 0.72)
             range: 8,
             damage: 1,
-            fireRate: 3000
+            fireRate: 3000,
+            size: 4 // Hitbox 4x plus grande
         });
     }
 
     static createFastShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'fast',
-            health: 2,
-            speed: 4,
+            health: 5, // Points de vie augmentés
+            speed: 1.44, // +20% (1.2 * 1.2 = 1.44)
             range: 6,
             damage: 1,
-            fireRate: 2000
+            fireRate: 2000,
+            size: 4 // Hitbox 4x plus grande
         });
     }
 
     static createHeavyShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'heavy',
-            health: 6,
-            speed: 1,
+            health: 7, // Plus résistant
+            speed: 0.36, // +20% (0.3 * 1.2 = 0.36)
             range: 10,
             damage: 2,
-            fireRate: 4000
+            fireRate: 4000,
+            size: 4 // Hitbox 4x plus grande
         });
     }
 
     static createArtilleryShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'artillery',
-            health: 4,
-            speed: 1.5,
+            health: 6, // Plus résistant
+            speed: 0.54, // +20% (0.45 * 1.2 = 0.54)
             range: 15,
             damage: 3,
-            fireRate: 5000
+            fireRate: 5000,
+            size: 4 // Hitbox 4x plus grande
         });
     }
 }

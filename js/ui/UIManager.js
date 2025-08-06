@@ -20,6 +20,12 @@ export class UIManager {
             cannonsPlaced: null,
             castlesClosed: null,
             
+            // Wave info
+            currentWave: null,
+            waveTimer: null,
+            enemyShips: null,
+            landUnits: null,
+            
             // Buttons
             startSolo: null,
             startMulti: null,
@@ -81,6 +87,12 @@ export class UIManager {
         this.elements.shipsDestroyed = document.getElementById('shipsDestroyed');
         this.elements.cannonsPlaced = document.getElementById('cannonsPlaced');
         this.elements.castlesClosed = document.getElementById('castlesClosed');
+        
+        // Wave info
+        this.elements.currentWave = document.getElementById('currentWave');
+        this.elements.waveTimer = document.getElementById('waveTimer');
+        this.elements.enemyShips = document.getElementById('enemyShips');
+        this.elements.landUnits = document.getElementById('landUnits');
         
         // Menu buttons
         this.elements.startSolo = document.getElementById('startSolo');
@@ -288,6 +300,26 @@ export class UIManager {
         
         if (this.elements.castlesClosed) {
             this.elements.castlesClosed.textContent = castlesClosed;
+        }
+    }
+
+    updateWaveInfo(waveData) {
+        if (this.elements.currentWave) {
+            this.elements.currentWave.textContent = waveData.currentWave || '-';
+        }
+        if (this.elements.waveTimer) {
+            if (waveData.timeRemaining !== undefined && waveData.timeRemaining > 0) {
+                const seconds = Math.ceil(waveData.timeRemaining / 1000);
+                this.elements.waveTimer.textContent = `${seconds}s`;
+            } else {
+                this.elements.waveTimer.textContent = '-';
+            }
+        }
+        if (this.elements.enemyShips) {
+            this.elements.enemyShips.textContent = waveData.enemyShips || 0;
+        }
+        if (this.elements.landUnits) {
+            this.elements.landUnits.textContent = waveData.landUnits || 0;
         }
     }
 

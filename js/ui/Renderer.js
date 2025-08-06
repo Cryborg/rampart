@@ -41,23 +41,45 @@ export class Renderer {
     handleResize() {
         const container = this.canvas.parentElement;
         const containerRect = container.getBoundingClientRect();
-        const maxWidth = Math.min(containerRect.width - 40, 768);
-        const maxHeight = Math.min(containerRect.height - 40, 768);
         
-        const size = Math.min(maxWidth, maxHeight);
-        this.canvas.width = size;
-        this.canvas.height = size;
+        // Utiliser la hauteur disponible avec un minimum raisonnable
+        const availableWidth = containerRect.width - 40;
+        const availableHeight = containerRect.height - 40;
+        
+        // Tailles minimales pour que le jeu reste jouable
+        const minWidth = 600;
+        const minHeight = 450;
+        
+        // S'adapter à la hauteur d'écran en priorité, avec un minimum
+        const canvasHeight = Math.max(minHeight, Math.min(availableHeight, 900));
+        
+        // Calculer la largeur proportionnellement au ratio 48:36 de la grille
+        const gridRatio = GAME_CONFIG.GRID.WIDTH / GAME_CONFIG.GRID.HEIGHT; // 48/36 = 1.33
+        let canvasWidth = canvasHeight * gridRatio;
+        
+        // S'assurer que la largeur ne dépasse pas l'espace disponible
+        if (canvasWidth > availableWidth) {
+            canvasWidth = Math.max(minWidth, availableWidth);
+            // Recalculer la hauteur si nécessaire
+            const adjustedHeight = canvasWidth / gridRatio;
+            if (adjustedHeight < availableHeight) {
+                canvasHeight = adjustedHeight;
+            }
+        }
+        
+        this.canvas.width = Math.floor(canvasWidth);
+        this.canvas.height = Math.floor(canvasHeight);
         
         // Calcul cellSize pour grille avec constantes - forcer entier pour grilles régulières
-        const cellSizeX = size / GAME_CONFIG.GRID.WIDTH;
-        const cellSizeY = size / GAME_CONFIG.GRID.HEIGHT; 
+        const cellSizeX = this.canvas.width / GAME_CONFIG.GRID.WIDTH;
+        const cellSizeY = this.canvas.height / GAME_CONFIG.GRID.HEIGHT; 
         this.cellSize = Math.floor(Math.min(cellSizeX, cellSizeY)); // Forcer entier
         
-        // Centrer la grille dans le canvas (mais décaler vers le haut pour voir tout)
+        // Centrer la grille dans le canvas
         const gridWidth = GAME_CONFIG.GRID.WIDTH * this.cellSize;
         const gridHeight = GAME_CONFIG.GRID.HEIGHT * this.cellSize;
-        this.gridOffsetX = (size - gridWidth) / 2;
-        this.gridOffsetY = Math.max(0, (size - gridHeight) / 2 - GAME_CONFIG.CANVAS.OFFSET_Y_ADJUSTMENT);
+        this.gridOffsetX = (this.canvas.width - gridWidth) / 2;
+        this.gridOffsetY = (this.canvas.height - gridHeight) / 2;
         
         this.setupPixelArt();
     }
