@@ -115,7 +115,203 @@ export class Grid {
         }
     }
 
-    generateTerrain() {
+    generateTerrain(mode = 'solo', playerConfigs = []) {
+        console.log(`🗺️ Génération terrain mode: ${mode}`);
+        
+        // Nettoyer la grille
+        this.clearGrid();
+        
+        switch (mode) {
+            case 'solo':
+                this.generateSoloTerrain();
+                break;
+            case '2players':
+                this.generate2PlayerTerrain();
+                break;
+            case '3players':
+                this.generate3PlayerTerrain();
+                break;
+            default:
+                console.warn(`Mode ${mode} non supporté, utilisation du mode solo`);
+                this.generateSoloTerrain();
+        }
+        
+        console.log(`🗺️ Terrain généré pour ${mode}`);
+    }
+
+    clearGrid() {
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                this.setCellType(x, y, CELL_TYPES.LAND);
+            }
+        }
+    }
+
+    generateSoloTerrain() {
+        const riverX = Math.floor(this.width * 0.65); // Rivière à 65% pour favoriser le joueur
+        const riverWidth = 3; // Largeur de la rivière
+        
+        // Créer la rivière verticale de séparation
+        for (let x = riverX; x < riverX + riverWidth && x < this.width; x++) {
+            for (let y = 0; y < this.height; y++) {
+                this.setCellType(x, y, CELL_TYPES.WATER);
+            }
+        }
+        
+        // Côté droit = mer (zone ennemie)
+        for (let x = riverX + riverWidth; x < this.width; x++) {
+            for (let y = 0; y < this.height; y++) {
+                // Garder quelques îlots de terre pour variété
+                if (Math.random() < 0.2) {
+                    this.setCellType(x, y, CELL_TYPES.LAND);
+                } else {
+                    this.setCellType(x, y, CELL_TYPES.WATER);
+                }
+            }
+        }
+        
+        // Bordures eau sur le côté droit
+        for (let y = 0; y < this.height; y++) {
+            this.setCellType(this.width - 1, y, CELL_TYPES.WATER);
+        }
+        
+        // Bordures eau haut/bas
+        for (let x = 0; x < this.width; x++) {
+            this.setCellType(x, 0, CELL_TYPES.WATER);
+            this.setCellType(x, this.height - 1, CELL_TYPES.WATER);
+        }
+        
+        console.log(`🗺️ Terrain solo : Joueur gauche (${riverX} cases), Mer droite`);
+    }
+
+    generate2PlayerTerrain() {
+        const riverY = Math.floor(this.height / 2);
+        const riverHeight = 2;
+        
+        // Rivière horizontale centrale
+        for (let y = riverY - 1; y <= riverY + riverHeight; y++) {
+            for (let x = 0; x < this.width; x++) {
+                if (y >= 0 && y < this.height) {
+                    this.setCellType(x, y, CELL_TYPES.WATER);
+                }
+            }
+        }
+        
+        // Bordures eau
+        this.addWaterBorders();
+        
+        console.log('🗺️ Terrain 2 joueurs : séparation horizontale');
+    }
+
+    generate3PlayerTerrain() {
+        // Rivière diagonale 1 (haut-gauche vers centre-droit)
+        this.createDiagonalRiver(0, 0, this.width - 1, Math.floor(this.height * 0.6));
+        
+        // Rivière diagonale 2 (bas-gauche vers centre-droit)  
+        this.createDiagonalRiver(0, this.height - 1, this.width - 1, Math.floor(this.height * 0.4));
+        
+        // Rivière verticale droite
+        const rightRiverX = Math.floor(this.width * 0.75);
+        for (let y = Math.floor(this.height * 0.4); y <= Math.floor(this.height * 0.6); y++) {
+            for (let x = rightRiverX; x < this.width; x++) {
+                this.setCellType(x, y, CELL_TYPES.WATER);
+            }
+        }
+        
+        // Bordures eau
+        this.addWaterBorders();
+        
+        console.log('🗺️ Terrain 3 joueurs : territoires triangulaires');
+    }
+
+    createDiagonalRiver(x1, y1, x2, y2) {
+        // Algorithme de Bresenham pour tracer une ligne
+        const dx = Math.abs(x2 - x1);
+        const dy = Math.abs(y2 - y1);
+        const sx = x1 < x2 ? 1 : -1;
+        const sy = y1 < y2 ? 1 : -1;
+        let err = dx - dy;
+        
+        let x = x1;
+        let y = y1;
+        
+        while (true) {
+            // Placer eau + cases adjacentes pour largeur rivière
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
+                        this.setCellType(nx, ny, CELL_TYPES.WATER);
+                    }
+                }
+            }
+            
+            if (x === x2 && y === y2) break;
+            
+            const e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+
+    getOptimalCastlePositions(mode, playerCount = 1) {
+        const positions = [];
+        
+        switch (mode) {
+            case 'solo':
+                // Centre-gauche pour le joueur
+                positions.push({
+                    playerId: 1,
+                    x: Math.floor(this.width * 0.25),
+                    y: Math.floor(this.height * 0.5)
+                });
+                break;
+                
+            case '2players':
+                // Haut et bas
+                positions.push({
+                    playerId: 1,
+                    x: Math.floor(this.width * 0.5),
+                    y: Math.floor(this.height * 0.25)
+                });
+                positions.push({
+                    playerId: 2,
+                    x: Math.floor(this.width * 0.5),
+                    y: Math.floor(this.height * 0.75)
+                });
+                break;
+                
+            case '3players':
+                // Positions triangulaires
+                positions.push({
+                    playerId: 1,
+                    x: Math.floor(this.width * 0.2),
+                    y: Math.floor(this.height * 0.2)
+                });
+                positions.push({
+                    playerId: 2,
+                    x: Math.floor(this.width * 0.2),
+                    y: Math.floor(this.height * 0.8)
+                });
+                positions.push({
+                    playerId: 3,
+                    x: Math.floor(this.width * 0.8),
+                    y: Math.floor(this.height * 0.5)
+                });
+                break;
+        }
+        
+        return positions;
+    }
+
+    generateTerrainLegacy() {
         this.addWaterBorders();
         this.addRandomWaterPools();
         this.addLandmasses();

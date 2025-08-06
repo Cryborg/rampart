@@ -5,6 +5,8 @@ import { InputHandler } from '../ui/InputHandler.js';
 import { Player } from './Player.js';
 import { GAME_CONFIG } from '../config/GameConstants.js';
 import { PieceGenerator } from './TetrisPieces.js';
+import { CombatSystem } from './CombatSystem.js';
+import { WaveManager } from './WaveManager.js';
 
 export class GameManager {
     constructor(uiManager) {
@@ -28,6 +30,11 @@ export class GameManager {
         this.cannonsPlacedThisPhase = 0;
         this.maxCannonsThisPhase = 0;
         
+        // Systèmes de combat et ennemis
+        this.combatSystem = null;
+        this.waveManager = null;
+        this.gameMode = 'solo';
+        
         this.canvas = null;
         this.ctx = null;
     }
@@ -49,6 +56,7 @@ export class GameManager {
         this.setupInputHandlers();
         this.initializePlayers();
         this.setupDefaultLevel();
+        this.initializeCombatSystems();
         
         console.log('🎮 GameManager initialized');
     }
@@ -62,9 +70,20 @@ export class GameManager {
         this.currentPlayer = 0;
     }
 
-    setupDefaultLevel() {
-        this.grid.generateTerrain();
-        this.createStartingCastle();
+    initializeCombatSystems() {
+        // Initialiser le système de combat
+        this.combatSystem = new CombatSystem(this);
+        
+        // Initialiser le gestionnaire de vagues
+        this.waveManager = new WaveManager(this);
+        
+        console.log('⚔️ Systèmes de combat initialisés');
+    }
+
+    setupDefaultLevel(mode = 'solo') {
+        this.gameMode = mode;
+        this.grid.generateTerrain(mode);
+        this.createStartingCastles(mode);
     }
 
     // Ancienne méthode supprimée - on utilise maintenant celle ligne 317
@@ -114,11 +133,15 @@ export class GameManager {
             // Store cannon preview position
             this.cannonPreviewPos = gridPos;
         }
+        
+        // Update combat system during combat phase
+        if (this.gameState.currentState === 'COMBAT' && this.combatSystem) {
+            this.combatSystem.handleMouseMove(gridPos.x, gridPos.y);
+        }
     }
 
     handleMouseClick(x, y, button) {
         const gridPos = this.renderer.screenToGrid(x, y);
-        
         
         switch (this.gameState.currentState) {
             case 'SELECT_TERRITORY':
@@ -127,11 +150,27 @@ export class GameManager {
             case 'PLACE_CANNONS':
                 this.handleCannonPlacement(gridPos, button);
                 break;
+            case 'COMBAT':
+                this.handleCombatClick(gridPos, button);
+                break;
             case 'REPAIR':
                 this.handlePiecePlacement(gridPos, button);
                 break;
             default:
                 console.log(`⚠️ No handler for state: ${this.gameState.currentState}`);
+        }
+    }
+
+    handleCombatClick(gridPos, button) {
+        if (!this.combatSystem) return;
+        
+        if (button === 0) { // Clic gauche
+            // Vérifier si on clique sur un canon pour viser/tirer
+            const player = this.players[this.currentPlayer];
+            this.combatSystem.handleCannonClick(gridPos.x, gridPos.y, player.id);
+        } else if (button === 2) { // Clic droit
+            // Annuler la visée
+            this.combatSystem.handleRightClick();
         }
     }
 
@@ -382,22 +421,32 @@ export class GameManager {
         }
     }
 
-    createStartingCastle() {
-        const player = this.players[0];
+    createStartingCastles(mode = 'solo') {
+        const positions = this.grid.getOptimalCastlePositions(mode, this.players.length);
         
-        // Trouver une position sûre loin de l'eau (centre de la grille)
-        let coreX = Math.floor(this.grid.width / 2);
-        let coreY = Math.floor(this.grid.height / 2);
+        for (let i = 0; i < positions.length && i < this.players.length; i++) {
+            const position = positions[i];
+            const player = this.players[i];
+            
+            this.createCastleAt(position.x, position.y, player);
+        }
         
+        // Forcer la détection de fermeture pour tous les châteaux
+        this.checkCastleClosure();
+    }
+
+    createCastleAt(coreX, coreY, player) {
         // Vérifier qu'on est bien sur terre et loin de l'eau
         let attempts = 0;
         while (attempts < 10) {
             const safeArea = this.isSafeForCastle(coreX, coreY, GAME_CONFIG.SIZES.SAFETY_RADIUS);
             if (safeArea) break;
             
-            // Essayer une autre position
-            coreX = Math.floor(this.grid.width * 0.3 + Math.random() * this.grid.width * 0.4);
-            coreY = Math.floor(this.grid.height * 0.3 + Math.random() * this.grid.height * 0.4);
+            // Essayer une position proche
+            coreX += (Math.random() - 0.5) * 4;
+            coreY += (Math.random() - 0.5) * 4;
+            coreX = Math.max(3, Math.min(this.grid.width - 4, coreX));
+            coreY = Math.max(3, Math.min(this.grid.height - 4, coreY));
             attempts++;
         }
         
@@ -416,10 +465,7 @@ export class GameManager {
         this.grid.setCellType(coreX, coreY, 'castle-core', player.id);
         player.castle.core = { x: coreX, y: coreY };
         
-        console.log(`🏰 Château de base ${GAME_CONFIG.SIZES.CASTLE_SIZE}x${GAME_CONFIG.SIZES.CASTLE_SIZE} créé avec core à (${coreX}, ${coreY})`);
-        
-        // Forcer la détection de fermeture
-        this.checkCastleClosure();
+        console.log(`🏰 Château joueur ${player.id} créé ${GAME_CONFIG.SIZES.CASTLE_SIZE}x${GAME_CONFIG.SIZES.CASTLE_SIZE} avec core à (${coreX}, ${coreY})`);
     }
     
     isSafeForCastle(centerX, centerY, radius) {
@@ -495,12 +541,35 @@ export class GameManager {
     startCombatPhase() {
         console.log('⚔️ Phase de combat démarrée');
         
-        // TODO: Implémenter logique de combat (bateaux ennemis, tirs automatiques)
-        // Pour l'instant, transition automatique vers REPAIR après 5 secondes
+        if (this.waveManager) {
+            // Démarrer une nouvelle vague d'ennemis
+            this.waveManager.startWave();
+        } else {
+            console.warn('⚠️ WaveManager non initialisé, combat simulé');
+            // Fallback: transition automatique après 10 secondes
+            setTimeout(() => {
+                console.log('⚔️ Combat simulé terminé ! Transition vers réparation.');
+                this.gameState.transition('REPAIR');
+            }, 10000);
+        }
+    }
+
+    onWaveEnd(waveNumber, stats) {
+        console.log(`🌊 Fin de vague ${waveNumber}:`, stats);
+        
+        // Transition vers la réparation après un délai
         setTimeout(() => {
             console.log('⚔️ Combat terminé ! Transition vers réparation.');
             this.gameState.transition('REPAIR');
-        }, 5000); // 5 secondes de "combat" pour tester
+        }, 2000); // 2 secondes de pause
+    }
+
+    onGameEnd(winner) {
+        console.log(`🏆 Fin de partie - Vainqueur:`, winner);
+        
+        // Transition vers l'écran de fin
+        // TODO: Implémenter écran de fin de partie
+        this.gameState.transition('GAME_OVER');
     }
 
     start() {
@@ -573,6 +642,15 @@ export class GameManager {
             this.repairTimeLeft = Math.max(0, GAME_CONFIG.TIMERS.REPAIR_PHASE / 1000 - elapsed);
         }
         
+        // Mettre à jour les systèmes de combat
+        if (this.combatSystem) {
+            this.combatSystem.update(deltaTime);
+        }
+        
+        if (this.waveManager) {
+            this.waveManager.update(deltaTime);
+        }
+        
         this.players.forEach(player => {
             player.update(deltaTime);
         });
@@ -638,6 +716,15 @@ export class GameManager {
         }
         
         this.renderer.renderPlayers(this.players);
+        
+        // Rendre les systèmes de combat
+        if (this.combatSystem && this.gameState.currentState === 'COMBAT') {
+            this.combatSystem.render(this.ctx, this.renderer);
+        }
+        
+        if (this.waveManager) {
+            this.waveManager.render(this.ctx, this.renderer);
+        }
         
         // Timer très visible en phase REPAIR
         if (this.gameState.currentState === 'REPAIR' && this.repairTimeLeft !== undefined) {
