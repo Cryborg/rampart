@@ -164,7 +164,7 @@ export class Renderer {
                 this.renderCastleCore(screenX, screenY);
                 break;
             case CELL_TYPES.CANNON:
-                this.renderCannon(screenX, screenY);
+                this.renderCannon(screenX, screenY, cell.health, cell.maxHealth);
                 break;
             case CELL_TYPES.WALL:
                 this.renderWall(screenX, screenY, cell.health);
@@ -187,7 +187,7 @@ export class Renderer {
         this.ctx.fillRect(Math.round(centerX + 4), Math.round(centerY - 4), 4, 8);
     }
 
-    renderCannon(x, y) {
+    renderCannon(x, y, health = 3, maxHealth = 3) {
         const size = this.cellSize;
         const centerX = x + size / 2;
         const centerY = y + size / 2;
@@ -198,6 +198,35 @@ export class Renderer {
         
         this.ctx.fillStyle = '#8b4513';
         this.ctx.fillRect(Math.round(centerX - 2), Math.round(centerY - 8), 4, 6);
+        
+        // Afficher la barre de HP si le canon est endommagé
+        if (health < maxHealth) {
+            const barWidth = size * 0.6;
+            const barHeight = 3;
+            const barX = x + (size - barWidth) / 2;
+            const barY = y + size + 2;
+            
+            // Fond rouge
+            this.ctx.fillStyle = '#ff0000';
+            this.ctx.fillRect(Math.round(barX), Math.round(barY), barWidth, barHeight);
+            
+            // Barre verte représentant les HP restants
+            const healthRatio = health / maxHealth;
+            this.ctx.fillStyle = '#00ff00';
+            this.ctx.fillRect(Math.round(barX), Math.round(barY), barWidth * healthRatio, barHeight);
+            
+            // Bordure blanche
+            this.ctx.strokeStyle = '#ffffff';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(Math.round(barX), Math.round(barY), barWidth, barHeight);
+            
+            // Afficher HP textuellement
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '10px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`${health}/${maxHealth}`, x + size/2, barY + barHeight + 12);
+            this.ctx.textAlign = 'left'; // Reset
+        }
     }
 
     renderWall(x, y, health) {

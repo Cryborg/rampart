@@ -399,6 +399,12 @@ export class GameManager {
             });
             
             console.log('🎯 Zones constructibles colorées ! Continue à construire jusqu\'à la fin du timer.');
+            
+            // Réactiver les canons qui sont maintenant dans des zones fermées
+            this.cleanupCanonsOutsideClosedCastles();
+        } else {
+            // Pas de zones fermées, mais on cleanup quand même pour être sûr
+            this.cleanupCanonsOutsideClosedCastles();
         }
     }
 
@@ -446,6 +452,7 @@ export class GameManager {
         }
         
         // CRUCIAL : Nettoyer les canons qui ne sont plus dans des zones fermées
+        // Ceci se fait APRÈS le recalcul, donc on connaît les vraies zones ouvertes
         this.cleanupCanonsOutsideClosedCastles();
     }
 
@@ -543,6 +550,12 @@ export class GameManager {
     }
 
     startRepairPhase() {
+        console.log('🧱 Phase de réparation démarrée');
+        
+        // CRUCIAL : Recalculer les zones fermées MAINTENANT que le combat est fini
+        console.log('🔄 Recalcul post-combat des zones fermées (début réparation)...');
+        this.recalculateCannonZones();
+        
         const player = this.players[this.currentPlayer];
         
         // Force generate a piece for repair phase
@@ -581,11 +594,16 @@ export class GameManager {
         
         // Les zones fermées ont déjà été recalculées à la fin du combat
         
+        // RÉGÉNÉRER LES HP DE TOUS LES CANONS DU JOUEUR
+        const player = this.players[this.currentPlayer];
+        this.grid.regenerateCannonHealth(player.id);
+        
+        // Le cleanup des canons se fait maintenant à la fin du combat et à chaque pose de pièce
+        
         // Réinitialiser le compteur de cette phase
         this.cannonsPlacedThisPhase = 0;
         this.maxCannonsThisPhase = this.calculateMaxCannonsForPhase();
         
-        const player = this.players[this.currentPlayer];
         const currentCannons = player.cannons.length;
         
         // Les canons restent en place ! Ils ne sont supprimés qu'au combat s'ils sont détruits
@@ -627,7 +645,7 @@ export class GameManager {
     onWaveEnd(waveNumber, stats) {
         console.log(`🌊 Fin de vague ${waveNumber}:`, stats);
         
-        // Le recalcul des zones se fera automatiquement dans le callback d'état (oldState === 'COMBAT')
+        // Le recalcul des zones se fera automatiquement dans startRepairPhase()
         
         // Transition vers la réparation après un délai
         setTimeout(() => {
@@ -661,12 +679,7 @@ export class GameManager {
                 this.clearRepairTimer();
             }
             
-            if (oldState === 'COMBAT') {
-                // CRUCIAL : Recalculer les zones fermées à la fin du combat
-                // Couvre le cas du timeout automatique (pas seulement onWaveEnd)
-                console.log('🔄 Recalcul post-combat des zones fermées (callback d\'état)...');
-                this.recalculateCannonZones();
-            }
+            // Recalcul des zones fermées déplacé vers startRepairPhase() pour éviter la régression
             
             if (newState === 'REPAIR') {
                 this.startRepairPhase();

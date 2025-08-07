@@ -31,13 +31,26 @@ export class WaveManager {
 
     initializeWavePatterns() {
         return {
+            // NIVEAU 1: Seulement des FAIBLES (5 HP) - basic et fast
             1: { basic: 3, fast: 0, heavy: 0, artillery: 0 },
-            2: { basic: 4, fast: 1, heavy: 0, artillery: 0 },
-            3: { basic: 3, fast: 2, heavy: 1, artillery: 0 },
-            4: { basic: 4, fast: 2, heavy: 1, artillery: 1 },
-            5: { basic: 5, fast: 3, heavy: 2, artillery: 1 },
-            // Vagues suivantes: augmentation progressive
-            default: { basic: 6, fast: 4, heavy: 2, artillery: 2 }
+            2: { basic: 3, fast: 1, heavy: 0, artillery: 0 },
+            3: { basic: 2, fast: 2, heavy: 0, artillery: 0 },
+            4: { basic: 4, fast: 2, heavy: 0, artillery: 0 },
+            
+            // NIVEAU 2: Ajout des MOYENS (10 HP) - heavy ships
+            5: { basic: 3, fast: 1, heavy: 1, artillery: 0 },
+            6: { basic: 3, fast: 2, heavy: 1, artillery: 0 },
+            7: { basic: 2, fast: 2, heavy: 2, artillery: 0 },
+            8: { basic: 4, fast: 1, heavy: 2, artillery: 0 },
+            
+            // NIVEAU 3: Ajout des FORTS (15 HP) - artillery ships
+            9: { basic: 2, fast: 1, heavy: 2, artillery: 1 },
+            10: { basic: 3, fast: 2, heavy: 2, artillery: 1 },
+            11: { basic: 2, fast: 1, heavy: 3, artillery: 1 },
+            12: { basic: 4, fast: 2, heavy: 2, artillery: 2 },
+            
+            // Vagues suivantes: tous types mélangés avec augmentation progressive
+            default: { basic: 5, fast: 3, heavy: 3, artillery: 2 }
         };
     }
 

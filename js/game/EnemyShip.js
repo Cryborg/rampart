@@ -1,6 +1,28 @@
 import { Projectile } from './Projectile.js';
 import { CELL_TYPES } from './Grid.js';
 
+// Niveaux d'expérience des navires ennemis
+export const EXPERIENCE_LEVELS = {
+    FAIBLE: {
+        name: 'faible',
+        baseAccuracy: 1.0,     // 100% pour tests - ils cassent toujours un mur
+        maxAccuracy: 1.0,      // 100% au maximum
+        maxShots: 5            // 5 tirs pour atteindre le max
+    },
+    MEDIUM: {
+        name: 'medium', 
+        baseAccuracy: 0.10,    // 10% au premier tir
+        maxAccuracy: 1.0,      // 100% au maximum
+        maxShots: 5            // 5 tirs pour atteindre le max
+    },
+    ELEVÉ: {
+        name: 'élevé',
+        baseAccuracy: 0.20,    // 20% au premier tir
+        maxAccuracy: 1.0,      // 100% au maximum
+        maxShots: 3            // 3 tirs seulement pour atteindre le max
+    }
+};
+
 export class EnemyShip {
     constructor(x, y, config = {}) {
         this.x = x;
@@ -10,13 +32,15 @@ export class EnemyShip {
         
         // Configuration du bateau
         this.type = config.type || 'basic';
-        this.health = config.health || 3;
+        this.health = config.health || 5; // Valeur par défaut cohérente avec basic ship
         this.maxHealth = this.health;
         this.speed = config.speed || 2; // Cases par seconde
-        this.range = config.range || 8; // Portée de tir
         this.damage = config.damage || 1;
-        this.fireRate = config.fireRate || 3000; // Temps entre tirs (ms)
+        this.fireRate = config.fireRate || 7000; // Temps entre tirs (7s de base)
         this.size = config.size || 1; // Taille en cases (1x1, 2x2, etc.)
+        
+        // Niveau d'expérience du navire
+        this.experienceLevel = config.experienceLevel || EXPERIENCE_LEVELS.MEDIUM;
         
         // État
         this.active = true;
@@ -24,9 +48,13 @@ export class EnemyShip {
         this.path = []; // Chemin de navigation
         this.pathIndex = 0;
         this.lastFireTime = 0;
+        this.nextFireTime = 0; // Timestamp du prochain tir autorisé
         this.isMoving = false;
         this.hasLanded = false; // A déjà débarqué des troupes
         this.lastLandingTime = 0;
+        
+        // Système de précision progressive
+        this.shotsFired = 0; // Nombre de tirs effectués sur la cible actuelle
         
         // IA
         this.aiState = 'seeking'; // seeking, attacking, fleeing, destroyed
@@ -38,7 +66,7 @@ export class EnemyShip {
         this.angle = 0; // Orientation du bateau
         this.color = this.getShipColor();
         
-        console.log(`🚢 Bateau ennemi ${this.type} créé à (${x}, ${y})`);
+        console.log(`🚢 Bateau ennemi ${this.type} (${this.experienceLevel.name}) créé à (${x}, ${y})`);
     }
 
     getShipColor() {
@@ -90,8 +118,8 @@ export class EnemyShip {
         
         this.lastTargetSearch = now;
         
-        // Chercher le château ennemi le plus proche
-        let closestCastle = null;
+        // Chercher le MUR le plus proche autour d'un château ennemi
+        let closestWallTarget = null;
         let closestDistance = Infinity;
         
         for (let player of gameManager.players) {
@@ -100,25 +128,29 @@ export class EnemyShip {
                 continue;
             }
             
-            const distance = this.getDistance(this.x, this.y, player.castle.core.x, player.castle.core.y);
-            console.log(`🚢 Distance au château ${player.id}: ${distance.toFixed(1)} (max: ${this.searchRadius})`);
-            if (distance < closestDistance && distance <= this.searchRadius) {
-                closestDistance = distance;
-                closestCastle = player.castle.core;
-                console.log(`🎯 Nouveau château cible: ${player.id} à (${closestCastle.x}, ${closestCastle.y})`);
+            // Chercher les murs autour du château de ce joueur
+            const wallTarget = this.findNearestWallAroundCastle(player.castle.core, gameManager.grid);
+            if (wallTarget) {
+                const distance = this.getDistance(this.x, this.y, wallTarget.x, wallTarget.y);
+                console.log(`🚢 Distance au mur cible près du château ${player.id}: ${distance.toFixed(1)} (max: ${this.searchRadius})`);
+                if (distance < closestDistance && distance <= this.searchRadius) {
+                    closestDistance = distance;
+                    closestWallTarget = wallTarget;
+                    console.log(`🎯 Nouveau mur cible: (${closestWallTarget.x}, ${closestWallTarget.y}) près du château ${player.id}`);
+                }
             }
         }
         
-        if (closestCastle) {
-            this.target = closestCastle;
-            // Naviguer vers le rivage le plus proche du château, pas directement au château
-            const shoreTarget = this.findNearestShorePoint(closestCastle.x, closestCastle.y, gameManager.grid);
+        if (closestWallTarget) {
+            this.setTarget(closestWallTarget);
+            // Naviguer vers le rivage le plus proche du mur cible
+            const shoreTarget = this.findNearestShorePoint(closestWallTarget.x, closestWallTarget.y, gameManager.grid);
             // Vérifier que le point de rivage est bien dans l'eau
             const shoreCell = gameManager.grid.getCell(shoreTarget.x, shoreTarget.y);
             if (shoreCell && shoreCell.type === 'water') {
                 this.calculatePathTo(shoreTarget.x, shoreTarget.y, gameManager.grid);
                 this.aiState = 'attacking';
-                console.log(`🎯 Bateau navigue vers le rivage (${shoreTarget.x}, ${shoreTarget.y}) pour atteindre château (${closestCastle.x}, ${closestCastle.y})`);
+                console.log(`🎯 Bateau navigue vers le rivage (${shoreTarget.x}, ${shoreTarget.y}) pour attaquer le mur (${closestWallTarget.x}, ${closestWallTarget.y})`);
             } else {
                 console.log(`⚠️ Point de rivage invalide (${shoreTarget.x}, ${shoreTarget.y}), patrouille`);
                 this.patrolTowardsShore(gameManager.grid);
@@ -161,9 +193,10 @@ export class EnemyShip {
             }
         }
         
-        // Vérifier si la cible est détruite
+        // Vérifier si la cible (mur) est détruite
         const cell = gameManager.grid.getCell(this.target.x, this.target.y);
-        if (!cell || cell.type !== 'castle-core') {
+        if (!cell || cell.type !== 'wall') {
+            // Le mur a été détruit, chercher un nouveau mur à attaquer
             this.target = null;
             this.aiState = 'seeking';
         }
@@ -199,6 +232,39 @@ export class EnemyShip {
             const targetY = this.y + (Math.random() - 0.5) * 8;
             this.calculatePathTo(shoreX, Math.max(1, Math.min(grid.height - 2, targetY)), grid);
         }
+    }
+
+    findNearestWallAroundCastle(castleCore, grid) {
+        // Chercher PLUSIEURS murs autour du château et en choisir un aléatoirement
+        const searchRadius = 10;
+        const wallCandidates = [];
+        
+        console.log(`🔍 Recherche de murs autour du château à (${castleCore.x}, ${castleCore.y})`);
+        
+        for (let x = Math.max(0, castleCore.x - searchRadius); 
+             x < Math.min(grid.width, castleCore.x + searchRadius + 1); x++) {
+            for (let y = Math.max(0, castleCore.y - searchRadius); 
+                 y < Math.min(grid.height, castleCore.y + searchRadius + 1); y++) {
+                
+                const cell = grid.getCell(x, y);
+                if (cell && cell.type === 'wall') {
+                    const distance = this.getDistance(castleCore.x, castleCore.y, x, y);
+                    wallCandidates.push({ x, y, distance });
+                }
+            }
+        }
+        
+        if (wallCandidates.length === 0) {
+            console.log(`⚠️ Aucun mur trouvé autour du château à (${castleCore.x}, ${castleCore.y})`);
+            return null;
+        }
+        
+        // Choisir complètement aléatoirement parmi TOUS les murs disponibles
+        const chosenWall = wallCandidates[Math.floor(Math.random() * wallCandidates.length)];
+        
+        console.log(`🧱 Mur choisi à (${chosenWall.x}, ${chosenWall.y}) à distance ${chosenWall.distance.toFixed(1)} du château (${wallCandidates.length} candidats)`);
+        
+        return { x: chosenWall.x, y: chosenWall.y };
     }
 
     findNearestShorePoint(castleX, castleY, grid) {
@@ -724,7 +790,9 @@ export class EnemyShip {
 
     updateCombat(deltaTime, gameManager) {
         const now = Date.now();
-        if (now - this.lastFireTime < this.fireRate) return;
+        
+        // Utiliser nextFireTime pour le délai aléatoire
+        if (now < this.nextFireTime) return;
         
         if (this.target && this.canAttackTarget()) {
             this.fireAt(this.target, gameManager.combatSystem);
@@ -732,26 +800,61 @@ export class EnemyShip {
         }
     }
 
+    setTarget(newTarget) {
+        // Si c'est une nouvelle cible, réinitialiser le compteur de précision
+        if (this.target !== newTarget) {
+            this.shotsFired = 0;
+            console.log(`🎯 Nouvelle cible acquise: (${newTarget.x}, ${newTarget.y}) - Précision réinitialisée`);
+        }
+        this.target = newTarget;
+    }
+
     canAttackTarget() {
-        if (!this.target) return false;
-        
-        const distance = this.getDistance(this.x, this.y, this.target.x, this.target.y);
-        return distance <= this.range;
+        // Plus de limitation de portée - les navires tirent des projectiles physiques
+        return this.target !== null;
     }
 
     fireAt(target, combatSystem) {
-        console.log(`💥 Bateau tire sur (${target.x}, ${target.y})`);
+        // Calculer la précision basée sur le niveau d'expérience et le nombre de tirs
+        const expLevel = this.experienceLevel;
+        const progressRatio = Math.min(1.0, this.shotsFired / (expLevel.maxShots - 1));
+        const currentAccuracy = expLevel.baseAccuracy + 
+                               (expLevel.maxAccuracy - expLevel.baseAccuracy) * progressRatio;
+        
+        console.log(`🎯 ${this.type} (${expLevel.name}) tire (#${this.shotsFired + 1}/${expLevel.maxShots}) avec ${Math.round(currentAccuracy * 100)}% de précision`);
+        
+        // Test de réussite du tir
+        const hitRoll = Math.random();
+        const isHit = hitRoll <= currentAccuracy;
+        
+        let targetX = target.x;
+        let targetY = target.y;
+        
+        // Si raté, dévier la trajectoire
+        if (!isHit) {
+            // Écart aléatoire de 1-3 cases
+            const maxDeviation = 3;
+            const deviationX = (Math.random() - 0.5) * 2 * maxDeviation;
+            const deviationY = (Math.random() - 0.5) * 2 * maxDeviation;
+            
+            targetX += deviationX;
+            targetY += deviationY;
+            
+            console.log(`💥 Tir raté ! Déviation vers (${targetX.toFixed(1)}, ${targetY.toFixed(1)})`);
+        } else {
+            console.log(`🎯 Tir réussi vers (${target.x}, ${target.y}) !`);
+        }
         
         // Créer un projectile ennemi
         const projectile = new Projectile(
             this.x, this.y,
-            target.x, target.y,
+            targetX, targetY,
             {
-                speed: 12,
+                speed: 8, // Un peu plus lent pour être visible
                 damage: this.damage,
                 type: 'cannonball',
                 color: '#ff4444', // Rouge pour les ennemis
-                maxLifetime: 8000
+                maxLifetime: 10000
             }
         );
         
@@ -762,17 +865,30 @@ export class EnemyShip {
         
         // Ajouter aux projectiles du système de combat
         combatSystem.projectiles.push(projectile);
+        
+        // Incrémenter le compteur de tirs sur cette cible
+        this.shotsFired++;
+        
+        // Programmer le prochain tir avec timing aléatoire (7s ± 2s)
+        const nextFireDelay = this.fireRate + (Math.random() - 0.5) * 4000; // ± 2 secondes
+        const now = Date.now();
+        this.lastFireTime = now;
+        this.nextFireTime = now + nextFireDelay;
+        
+        console.log(`⏰ Prochain tir dans ${Math.round(nextFireDelay / 1000)}s`);
     }
 
     takeDamage(damage) {
         this.health -= damage;
-        console.log(`🚢 Bateau endommagé: ${this.health}/${this.maxHealth} HP`);
+        console.log(`🚢 ${this.type} (${this.experienceLevel.name}) touché: ${this.health}/${this.maxHealth} HP`);
         
         if (this.health <= 0) {
+            console.log(`💥 ${this.type} (${this.experienceLevel.name}) détruit !`);
             this.destroy();
             return true; // Bateau détruit
         } else if (this.health <= this.maxHealth * 0.3) {
             // Bateau gravement endommagé, fuir
+            console.log(`🏃‍♂️ ${this.type} gravement endommagé - fuit le combat !`);
             this.aiState = 'fleeing';
         }
         
@@ -916,48 +1032,48 @@ export class ShipFactory {
     static createBasicShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'basic',
-            health: 5, // Points de vie augmentés
+            health: 5, // FAIBLE - Faciles à éliminer
             speed: 0.72, // +20% (0.6 * 1.2 = 0.72)
-            range: 8,
             damage: 1,
-            fireRate: 3000,
-            size: 4 // Hitbox 4x plus grande
+            fireRate: 7000, // 7s ± 2s
+            size: 4, // Hitbox 4x plus grande
+            experienceLevel: EXPERIENCE_LEVELS.FAIBLE // Recrues peu expérimentées
         });
     }
 
     static createFastShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'fast',
-            health: 5, // Points de vie augmentés
+            health: 5, // FAIBLE - Rapides mais fragiles
             speed: 1.44, // +20% (1.2 * 1.2 = 1.44)
-            range: 6,
             damage: 1,
-            fireRate: 2000,
-            size: 4 // Hitbox 4x plus grande
+            fireRate: 6000, // Fast ship tire plus vite
+            size: 4, // Hitbox 4x plus grande
+            experienceLevel: EXPERIENCE_LEVELS.FAIBLE // Rapides mais inexpérimentés
         });
     }
 
     static createHeavyShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'heavy',
-            health: 7, // Plus résistant
+            health: 10, // MEDIUM - Résistants
             speed: 0.36, // +20% (0.3 * 1.2 = 0.36)
-            range: 10,
             damage: 2,
-            fireRate: 4000,
-            size: 4 // Hitbox 4x plus grande
+            fireRate: 8000, // Heavy ship tire plus lentement
+            size: 4, // Hitbox 4x plus grande
+            experienceLevel: EXPERIENCE_LEVELS.MEDIUM // Expérience moyenne
         });
     }
 
     static createArtilleryShip(x, y) {
         return new EnemyShip(x, y, {
             type: 'artillery',
-            health: 6, // Plus résistant
+            health: 15, // ÉLEVÉ - Très résistants et dangereux
             speed: 0.54, // +20% (0.45 * 1.2 = 0.54)
-            range: 15,
             damage: 3,
-            fireRate: 5000,
-            size: 4 // Hitbox 4x plus grande
+            fireRate: 7500, // Artillery ship cadence intermédiaire
+            size: 4, // Hitbox 4x plus grande
+            experienceLevel: EXPERIENCE_LEVELS.ELEVÉ // Spécialistes du tir, très expérimentés
         });
     }
 }

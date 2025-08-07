@@ -183,13 +183,18 @@ export class CombatSystem {
         // Vérifier si la cellule peut être endommagée
         if (!cell.isDestructible()) return;
 
-        console.log(`💥 Dégâts ${damage} à (${x}, ${y}) - Type: ${cell.type}`);
+        const oldHealth = cell.health;
+        console.log(`💥 Dégâts ${damage} à (${x}, ${y}) - Type: ${cell.type}, HP: ${oldHealth}/${cell.maxHealth}`);
 
         // Appliquer les dégâts
-        const destroyed = cell.takeDamage(damage);
+        cell.health = Math.max(0, cell.health - damage);
+        const newHealth = cell.health;
         
-        if (destroyed) {
-            console.log(`💥 ${cell.type} détruit à (${x}, ${y})`);
+        console.log(`🔧 ${cell.type} à (${x}, ${y}): ${oldHealth} → ${newHealth} HP`);
+        
+        // La cellule n'est "détruite" que si elle atteint 0 HP
+        if (newHealth <= 0 && oldHealth > 0) {
+            console.log(`💥 ${cell.type} détruit à (${x}, ${y}) (HP épuisés)`);
             
             // Traitement spéciaux selon le type
             switch (cell.type) {
@@ -197,9 +202,13 @@ export class CombatSystem {
                     this.onCannonDestroyed(x, y);
                     break;
                 case CELL_TYPES.CASTLE_CORE:
+                    // Pour les core et murs, destruction immédiate comme avant
+                    cell.type = CELL_TYPES.DESTROYED;
                     this.onCastleCoreDestroyed(x, y);
                     break;
                 case CELL_TYPES.WALL:
+                    // Pour les core et murs, destruction immédiate comme avant
+                    cell.type = CELL_TYPES.DESTROYED;
                     this.onWallDestroyed(x, y);
                     break;
             }
@@ -207,21 +216,59 @@ export class CombatSystem {
     }
 
     /**
-     * Événement : canon détruit
+     * Événement : canon détruit (uniquement quand tous ses HP sont épuisés)
      */
     onCannonDestroyed(x, y) {
-        // Trouver le joueur qui possédait ce canon
+        // Vérifier que toutes les cellules du canon 2x2 sont détruites
+        const cannonCells = [];
+        let cannonPlayerInfo = null;
+        
+        // Trouver le canon 2x2 qui contient cette cellule
         const players = this.gameManager.players;
         for (let player of players) {
-            for (let i = player.cannons.length - 1; i >= 0; i--) {
-                const cannon = player.cannons[i];
+            for (let cannon of player.cannons) {
+                // Vérifier si cette cellule appartient à ce canon 2x2
                 if (x >= cannon.x && x < cannon.x + 2 && 
                     y >= cannon.y && y < cannon.y + 2) {
                     
-                    player.cannons.splice(i, 1);
-                    console.log(`🎯 Canon du joueur ${player.id} détruit`);
+                    cannonPlayerInfo = { player, cannon };
+                    
+                    // Collecter toutes les cellules du canon
+                    for (let dx = 0; dx < 2; dx++) {
+                        for (let dy = 0; dy < 2; dy++) {
+                            const cellX = cannon.x + dx;
+                            const cellY = cannon.y + dy;
+                            const cell = this.grid.getCell(cellX, cellY);
+                            if (cell && cell.type === CELL_TYPES.CANNON) {
+                                cannonCells.push({ cell, x: cellX, y: cellY });
+                            }
+                        }
+                    }
                     break;
                 }
+            }
+            if (cannonPlayerInfo) break;
+        }
+        
+        // Vérifier si toutes les cellules du canon sont détruites (HP = 0)
+        if (cannonPlayerInfo && cannonCells.length > 0) {
+            const allCellsDestroyed = cannonCells.every(({cell}) => cell.health <= 0);
+            
+            if (allCellsDestroyed) {
+                // MAINTENANT on peut supprimer le canon de la liste du joueur
+                const playerCannons = cannonPlayerInfo.player.cannons;
+                const cannonIndex = playerCannons.indexOf(cannonPlayerInfo.cannon);
+                if (cannonIndex !== -1) {
+                    playerCannons.splice(cannonIndex, 1);
+                    console.log(`🎯 Canon du joueur ${cannonPlayerInfo.player.id} complètement détruit (toutes cellules à 0 HP)`);
+                }
+                
+                // Détruire toutes les cellules du canon sur la grille
+                cannonCells.forEach(({x: cellX, y: cellY}) => {
+                    this.grid.setCellType(cellX, cellY, CELL_TYPES.DESTROYED);
+                });
+            } else {
+                console.log(`🔧 Canon endommagé mais pas complètement détruit (${cannonCells.filter(({cell}) => cell.health > 0).length}/${cannonCells.length} cellules survivantes)`);
             }
         }
     }

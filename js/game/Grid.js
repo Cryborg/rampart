@@ -29,7 +29,7 @@ export const CELL_PROPERTIES = {
     [CELL_TYPES.CASTLE_CORE]: {
         walkable: false,
         buildable: false,
-        destructible: true,
+        destructible: false, // Les cores ne peuvent pas être détruits par les projectiles
         color: '#dc2626'
     },
     [CELL_TYPES.CANNON]: {
@@ -52,8 +52,21 @@ export class Cell {
         this.y = y;
         this.type = type;
         this.playerId = null; // Which player owns this cell
-        this.health = 1; // For destructible cells
+        this.health = this.getDefaultHealth(type); // For destructible cells
+        this.maxHealth = this.health; // Pour régénération des canons
         this.lastModified = Date.now();
+    }
+
+    getDefaultHealth(type) {
+        switch (type) {
+            case CELL_TYPES.CANNON:
+                return 3; // Les canons du joueur ont 3 HP
+            case CELL_TYPES.WALL:
+            case CELL_TYPES.CASTLE_CORE:
+                return 1;
+            default:
+                return 1;
+        }
     }
 
     getProperties() {
@@ -427,11 +440,38 @@ export class Grid {
             cell.playerId = playerId;
             cell.lastModified = Date.now();
             
-            // Reset health for new cell types
+            // Reset health for new cell types with proper default values
             if (CELL_PROPERTIES[type]?.destructible) {
-                cell.health = 1;
+                cell.health = cell.getDefaultHealth(type);
+                cell.maxHealth = cell.health;
             }
         }
+    }
+
+    // Régénérer les HP de tous les canons du joueur
+    regenerateCannonHealth(playerId = null) {
+        let regeneratedCount = 0;
+        
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                const cell = this.getCell(x, y);
+                if (cell && cell.type === CELL_TYPES.CANNON) {
+                    // Régénérer si c'est le bon joueur ou tous les joueurs (null)
+                    if (playerId === null || cell.playerId === playerId) {
+                        if (cell.health < cell.maxHealth) {
+                            cell.health = cell.maxHealth;
+                            regeneratedCount++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (regeneratedCount > 0) {
+            console.log(`🔧 ${regeneratedCount} canons régénérés à pleine santé`);
+        }
+        
+        return regeneratedCount;
     }
 
     isValidPosition(x, y) {
