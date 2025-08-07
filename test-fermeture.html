@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Algorithme de Fermeture - Rampart</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .grid-container {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        canvas {
+            border: 2px solid #333;
+            cursor: crosshair;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-width: 300px;
+        }
+        
+        .controls h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .controls button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+        }
+        
+        .controls button:hover {
+            background: #0056b3;
+        }
+        
+        .log-container {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+        }
+        
+        .stats {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test de l'algorithme de détection de zones fermées</h1>
+    
+    <div class="container">
+        <div class="grid-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div class="controls">
+            <h3>Contrôles</h3>
+            
+            <button onclick="clearGrid();">🗑️ Effacer tout</button>
+            <button onclick="loadScenario('closed')">🏰 Scénario: Château fermé</button>
+            <button onclick="loadScenario('open')">🚪 Scénario: Château ouvert</button>
+            <button onclick="loadScenario('water')">💧 Scénario: Avec eau intérieure</button>
+            <button onclick="loadScenario('complex')">🏗️ Scénario: Forme complexe</button>
+            <button onclick="loadScenario('corners')">📐 Scénario: Test des coins</button>
+            <button onclick="loadScenario('cannons')">🎯 Scénario: Test canons</button>
+            
+            <h4>🖱️ Contrôles :</h4>
+            <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                • <strong>Clic simple</strong> : Fait défiler les types de cellules<br>
+                • <strong>Clic + glissé</strong> : Dessine en continu le type suivant<br>
+                • <strong>Types</strong> : 🌱 Terre → 🧱 Mur → 💥 Détruit → 💧 Eau → 🏰 Château → 🎯 Canon → 🌱 Terre...
+            </div>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8FBC8F;"></div>
+                    <span>Terre</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4A6FA5;"></div>
+                    <span>Eau</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8B4513;"></div>
+                    <span>Mur</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FFD700;"></div>
+                    <span>Château</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #DC2626;"></div>
+                    <span>Canon</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #374151;"></div>
+                    <span>Détruit</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(255, 215, 0, 0.8);"></div>
+                    <span>Zone fermée (constructible)</span>
+                </div>
+            </div>
+            
+            <div class="stats" id="stats">
+                <strong>Statistiques:</strong><br>
+                Zones fermées: <span id="closedCount">0</span><br>
+                Cellules dans zones: <span id="cellsInZones">0</span><br>
+                Canons: <span id="cannonCount">0</span><br>
+                Murs: <span id="wallCount">0</span>
+            </div>
+            
+            <div class="log-container" id="log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Grid, CELL_TYPES, CELL_PROPERTIES } from './js/game/Grid.js';
+        
+        const CELL_SIZE = 16;
+        const GRID_WIDTH = 48;
+        const GRID_HEIGHT = 36;
+        
+        let grid;
+        let canvas;
+        let ctx;
+        let enclosedAreas = [];
+        
+        // Variables pour le dessin
+        let isDrawing = false;
+        let currentDrawType = CELL_TYPES.WALL;
+        let lastDrawnCell = null;
+        
+        // Variables pour les logs
+        let logMessages = [];
+        const logContainer = document.getElementById('log');
+        
+        function log(message) {
+            console.log(message);
+            logMessages.push(message);
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `${new Date().toISOString().substr(11, 8)} - ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function clearLog() {
+            logMessages = [];
+            logContainer.innerHTML = '';
+        }
+        
+        // Initialisation
+        window.addEventListener('DOMContentLoaded', () => {
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = GRID_WIDTH * CELL_SIZE;
+            canvas.height = GRID_HEIGHT * CELL_SIZE;
+            
+            // Créer une grille vide
+            grid = new Grid(GRID_WIDTH, GRID_HEIGHT);
+            
+            
+            // Gestionnaires d'événements pour le dessin
+            canvas.addEventListener('mousedown', handleMouseDown);
+            canvas.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('mousemove', handleCanvasMove);
+            canvas.addEventListener('mouseleave', handleMouseLeave); // Arrêter le dessin si on sort du canvas
+            
+            // Initialiser après avoir défini toutes les fonctions
+            setTimeout(() => {
+                clearGrid();
+                renderGrid();
+            }, 100);
+        });
+        
+        function handleMouseDown(e) {
+            if (e.button !== 0) return; // Seulement clic gauche
+            
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+            const y = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+            
+            // Déterminer le type à dessiner basé sur le clic initial
+            const currentCell = grid.getCell(x, y);
+            if (currentCell) {
+                currentDrawType = getNextCellType(currentCell.type);
+            }
+            
+            // NE PAS dessiner immédiatement - attendre le mouvement ou le mouseup
+            lastDrawnCell = null;
+        }
+        
+        function handleMouseUp(e) {
+            if (isDrawing) {
+                isDrawing = false;
+                
+                // Si on n'a rien dessiné (clic simple sans mouvement), on fait le cycle normal
+                if (lastDrawnCell === null) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+                    const y = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+                    cycleCellType(x, y);
+                } else {
+                    // On a dessiné, recalculer les zones
+                    testEnclosedAreas();
+                    renderGrid();
+                }
+                
+                lastDrawnCell = null;
+            }
+        }
+        
+        function handleMouseLeave(e) {
+            if (isDrawing) {
+                isDrawing = false;
+                // Si on a dessiné quelque chose, recalculer
+                if (lastDrawnCell !== null) {
+                    testEnclosedAreas();
+                    renderGrid();
+                }
+                lastDrawnCell = null;
+            }
+        }
+        
+        function getNextCellType(currentType) {
+            if (!currentType || currentType === CELL_TYPES.LAND) {
+                return CELL_TYPES.WALL;
+            } else if (currentType === CELL_TYPES.WALL) {
+                return CELL_TYPES.DESTROYED;
+            } else if (currentType === CELL_TYPES.DESTROYED) {
+                return CELL_TYPES.WATER;
+            } else if (currentType === CELL_TYPES.WATER) {
+                return CELL_TYPES.CASTLE_CORE;
+            } else if (currentType === CELL_TYPES.CASTLE_CORE) {
+                return CELL_TYPES.CANNON;
+            } else if (currentType === CELL_TYPES.CANNON) {
+                return CELL_TYPES.LAND;
+            } else {
+                return CELL_TYPES.LAND; // Fallback
+            }
+        }
+        
+        function cycleCellType(x, y) {
+            const currentCell = grid.getCell(x, y);
+            let newType = getNextCellType(currentCell?.type);
+            
+            grid.setCellType(x, y, newType);
+            
+            // Recalculer les zones fermées
+            testEnclosedAreas();
+            renderGrid();
+        }
+        
+        function drawCell(x, y) {
+            // Éviter de redessiner la même cellule
+            const cellKey = `${x},${y}`;
+            if (lastDrawnCell === cellKey) return;
+            lastDrawnCell = cellKey;
+            
+            grid.setCellType(x, y, currentDrawType);
+            renderGrid(); // Rendu immédiat pour le feedback visuel
+        }
+        
+        function handleCanvasMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+            const y = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+            
+            // Si on dessine, continuer à dessiner
+            if (isDrawing) {
+                drawCell(x, y);
+                return;
+            }
+            
+            renderGrid();
+            
+            // Afficher un aperçu de la cellule survolée
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+        
+        function renderGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Dessiner la grille
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                for (let x = 0; x < GRID_WIDTH; x++) {
+                    const cell = grid.getCell(x, y);
+                    if (cell && cell.type) {
+                        // Récupérer la couleur depuis CELL_PROPERTIES
+                        const cellProps = CELL_PROPERTIES[cell.type];
+                        if (cellProps && cellProps.color) {
+                            ctx.fillStyle = cellProps.color;
+                            ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                        }
+                    }
+                }
+            }
+            
+            // Mettre en surbrillance les zones fermées en doré (comme Rampart original)
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.4)'; // Or semi-transparent
+            enclosedAreas.forEach(area => {
+                area.forEach(({ x, y }) => {
+                    ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                });
+            });
+            
+            // Dessiner la grille
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= GRID_WIDTH; x++) {
+                ctx.beginPath();
+                ctx.moveTo(x * CELL_SIZE, 0);
+                ctx.lineTo(x * CELL_SIZE, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= GRID_HEIGHT; y++) {
+                ctx.beginPath();
+                ctx.moveTo(0, y * CELL_SIZE);
+                ctx.lineTo(canvas.width, y * CELL_SIZE);
+                ctx.stroke();
+            }
+        }
+        
+        function testEnclosedAreas() {
+            clearLog();
+            log('=== Test de détection des zones fermées ===');
+            
+            enclosedAreas = grid.findEnclosedAreas();
+            
+            // Compter différents types de cellules
+            let cannonCount = 0;
+            let wallCount = 0;
+            let cellsInZones = 0;
+            
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                for (let x = 0; x < GRID_WIDTH; x++) {
+                    const cell = grid.getCell(x, y);
+                    if (cell) {
+                        if (cell.type === CELL_TYPES.CANNON) cannonCount++;
+                        if (cell.type === CELL_TYPES.WALL) wallCount++;
+                    }
+                }
+            }
+            
+            enclosedAreas.forEach(area => {
+                cellsInZones += area.length;
+            });
+            
+            // Mettre à jour les statistiques
+            const totalZones = enclosedAreas.length;
+            document.getElementById('closedCount').textContent = totalZones;
+            document.getElementById('cellsInZones').textContent = cellsInZones;
+            document.getElementById('cannonCount').textContent = cannonCount;
+            document.getElementById('wallCount').textContent = wallCount;
+            
+            log(`\nRésultat: ${totalZones} zone(s) fermée(s) détectée(s)`);
+            log(`Cellules dans zones fermées: ${cellsInZones}`);
+            log(`Canons sur la grille: ${cannonCount}`);
+            log(`Murs sur la grille: ${wallCount}`);
+            
+            // Détailler chaque zone
+            enclosedAreas.forEach((area, index) => {
+                log(`Zone ${index + 1}: ${area.length} cellules`);
+            });
+        }
+        
+        function clearGrid() {
+            // Réinitialiser toute la grille avec de la terre
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                for (let x = 0; x < GRID_WIDTH; x++) {
+                    grid.setCellType(x, y, CELL_TYPES.LAND);
+                }
+            }
+            
+            // Ajouter l'eau sur les bords
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                grid.setCellType(x, 0, CELL_TYPES.WATER);
+                grid.setCellType(x, GRID_HEIGHT - 1, CELL_TYPES.WATER);
+            }
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                grid.setCellType(0, y, CELL_TYPES.WATER);
+                grid.setCellType(GRID_WIDTH - 1, y, CELL_TYPES.WATER);
+            }
+            
+            clearLog();
+            testEnclosedAreas();
+            renderGrid();
+        }
+        
+        function loadScenario(scenario) {
+            clearGrid();
+            clearLog();
+            
+            switch (scenario) {
+                case 'closed':
+                    // Château fermé simple
+                    for (let x = 10; x <= 20; x++) {
+                        grid.setCellType(x, 10, CELL_TYPES.WALL);
+                        grid.setCellType(x, 20, CELL_TYPES.WALL);
+                    }
+                    for (let y = 10; y <= 20; y++) {
+                        grid.setCellType(10, y, CELL_TYPES.WALL);
+                        grid.setCellType(20, y, CELL_TYPES.WALL);
+                    }
+                    grid.setCellType(15, 15, CELL_TYPES.CASTLE_CORE);
+                    break;
+                    
+                case 'open':
+                    // Château avec une ouverture
+                    for (let x = 10; x <= 20; x++) {
+                        grid.setCellType(x, 10, CELL_TYPES.WALL);
+                        if (x !== 15) grid.setCellType(x, 20, CELL_TYPES.WALL);
+                    }
+                    for (let y = 10; y <= 20; y++) {
+                        grid.setCellType(10, y, CELL_TYPES.WALL);
+                        grid.setCellType(20, y, CELL_TYPES.WALL);
+                    }
+                    grid.setCellType(15, 15, CELL_TYPES.CASTLE_CORE);
+                    break;
+                    
+                case 'water':
+                    // Château avec de l'eau à l'intérieur
+                    for (let x = 25; x <= 35; x++) {
+                        grid.setCellType(x, 10, CELL_TYPES.WALL);
+                        grid.setCellType(x, 20, CELL_TYPES.WALL);
+                    }
+                    for (let y = 10; y <= 20; y++) {
+                        grid.setCellType(25, y, CELL_TYPES.WALL);
+                        grid.setCellType(35, y, CELL_TYPES.WALL);
+                    }
+                    // Ajouter de l'eau à l'intérieur
+                    for (let x = 28; x <= 32; x++) {
+                        for (let y = 13; y <= 17; y++) {
+                            grid.setCellType(x, y, CELL_TYPES.WATER);
+                        }
+                    }
+                    grid.setCellType(30, 15, CELL_TYPES.CASTLE_CORE);
+                    break;
+                    
+                case 'complex':
+                    // Forme en L
+                    for (let x = 5; x <= 15; x++) {
+                        grid.setCellType(x, 5, CELL_TYPES.WALL);
+                        if (x <= 10) grid.setCellType(x, 15, CELL_TYPES.WALL);
+                    }
+                    for (let y = 5; y <= 25; y++) {
+                        grid.setCellType(5, y, CELL_TYPES.WALL);
+                        if (y >= 15) grid.setCellType(10, y, CELL_TYPES.WALL);
+                    }
+                    grid.setCellType(15, 5, CELL_TYPES.WALL);
+                    grid.setCellType(15, 15, CELL_TYPES.WALL);
+                    grid.setCellType(10, 25, CELL_TYPES.WALL);
+                    
+                    grid.setCellType(8, 10, CELL_TYPES.CASTLE_CORE);
+                    grid.setCellType(8, 20, CELL_TYPES.CASTLE_CORE);
+                    break;
+                    
+                case 'corners':
+                    // Test des connexions par les coins
+                    // Carré 1
+                    for (let x = 10; x <= 14; x++) {
+                        grid.setCellType(x, 10, CELL_TYPES.WALL);
+                        grid.setCellType(x, 14, CELL_TYPES.WALL);
+                    }
+                    for (let y = 10; y <= 14; y++) {
+                        grid.setCellType(10, y, CELL_TYPES.WALL);
+                        grid.setCellType(14, y, CELL_TYPES.WALL);
+                    }
+                    
+                    // Carré 2 - touche seulement par le coin
+                    for (let x = 15; x <= 19; x++) {
+                        grid.setCellType(x, 15, CELL_TYPES.WALL);
+                        grid.setCellType(x, 19, CELL_TYPES.WALL);
+                    }
+                    for (let y = 15; y <= 19; y++) {
+                        grid.setCellType(15, y, CELL_TYPES.WALL);
+                        grid.setCellType(19, y, CELL_TYPES.WALL);
+                    }
+                    break;
+                    
+                case 'cannons':
+                    // Château fermé avec des canons à l'intérieur
+                    for (let x = 10; x <= 20; x++) {
+                        grid.setCellType(x, 10, CELL_TYPES.WALL);
+                        grid.setCellType(x, 20, CELL_TYPES.WALL);
+                    }
+                    for (let y = 10; y <= 20; y++) {
+                        grid.setCellType(10, y, CELL_TYPES.WALL);
+                        grid.setCellType(20, y, CELL_TYPES.WALL);
+                    }
+                    // Château au centre
+                    grid.setCellType(15, 15, CELL_TYPES.CASTLE_CORE);
+                    
+                    // Placer quelques canons 2x2 dans le château
+                    grid.setCellType(12, 12, CELL_TYPES.CANNON);
+                    grid.setCellType(13, 12, CELL_TYPES.CANNON);
+                    grid.setCellType(12, 13, CELL_TYPES.CANNON);
+                    grid.setCellType(13, 13, CELL_TYPES.CANNON);
+                    
+                    grid.setCellType(17, 17, CELL_TYPES.CANNON);
+                    grid.setCellType(18, 17, CELL_TYPES.CANNON);
+                    grid.setCellType(17, 18, CELL_TYPES.CANNON);
+                    grid.setCellType(18, 18, CELL_TYPES.CANNON);
+                    
+                    log('🎯 Château avec canons créé - essaie de détruire un mur pour voir les canons devenir invalides !');
+                    break;
+            }
+            
+            testEnclosedAreas();
+            renderGrid();
+        }
+        
+        // Exposer les fonctions globalement
+        window.grid = grid;
+        window.renderGrid = renderGrid;
+        window.loadScenario = loadScenario;
+        window.testEnclosedAreas = testEnclosedAreas;
+        window.clearGrid = clearGrid;
+        
+    </script>
+</body>
+</html>

@@ -415,6 +415,64 @@ export class GameManager {
         console.log(`🎯 Zone constructible mise en surbrillance: ${area.length} cellules`);
     }
 
+    recalculateCannonZones() {
+        console.log('🔄 Recalcul des zones fermées après combat/destruction...');
+        
+        // Effacer TOUTES les zones canons existantes
+        for (let y = 0; y < this.grid.height; y++) {
+            for (let x = 0; x < this.grid.width; x++) {
+                const cell = this.grid.getCell(x, y);
+                if (cell) {
+                    cell.cannonZone = false;
+                }
+            }
+        }
+        
+        // Recalculer les châteaux fermés
+        const closedCastles = this.grid.findClosedCastles();
+        
+        if (closedCastles.length > 0) {
+            console.log(`🏰 ${closedCastles.length} château(x) fermé(s) détecté(s) après recalcul`);
+            
+            // Remarquer les zones fermées
+            closedCastles.forEach((castle, index) => {
+                console.log(`🏰 Château ${index + 1}: Zone de ${castle.size} cellules (recalculé)`);
+                this.highlightConstructibleArea(castle.area);
+            });
+        } else {
+            console.log('🏚️ Aucun château fermé détecté - tous les châteaux ont été ouverts !');
+        }
+        
+        // CRUCIAL : Nettoyer les canons qui ne sont plus dans des zones fermées
+        this.cleanupCanonsOutsideClosedCastles();
+    }
+
+    cleanupCanonsOutsideClosedCastles() {
+        this.players.forEach(player => {
+            const initialCannonCount = player.cannons.length;
+            
+            // Filtrer les canons qui sont encore dans des zones fermées
+            player.cannons = player.cannons.filter(cannon => {
+                // Vérifier si le canon 2x2 est entièrement dans une zone fermée
+                for (let dx = 0; dx < 2; dx++) {
+                    for (let dy = 0; dy < 2; dy++) {
+                        const cell = this.grid.getCell(cannon.x + dx, cannon.y + dy);
+                        if (!cell || !cell.cannonZone) {
+                            console.log(`🎯❌ Canon à (${cannon.x}, ${cannon.y}) supprimé - plus dans zone fermée`);
+                            return false; // Canon pas entièrement dans zone fermée
+                        }
+                    }
+                }
+                return true; // Canon OK, reste dans la liste
+            });
+            
+            const removedCannons = initialCannonCount - player.cannons.length;
+            if (removedCannons > 0) {
+                console.log(`🎯🗑️ Joueur ${player.id}: ${removedCannons} canon(s) supprimé(s) (hors zones fermées)`);
+            }
+        });
+    }
+
     rotatePiece() {
         const player = this.players[this.currentPlayer];
         if (player.currentPiece) {
@@ -518,6 +576,10 @@ export class GameManager {
 
     startCannonPlacementPhase() {
         console.log('🎯 Phase placement des canons démarrée');
+        
+        // CRUCIAL : Recalculer les zones fermées après le combat
+        // Les cellules détruites peuvent avoir ouvert des châteaux
+        this.recalculateCannonZones();
         
         // Réinitialiser le compteur de cette phase
         this.cannonsPlacedThisPhase = 0;
@@ -627,10 +689,14 @@ export class GameManager {
             cancelAnimationFrame(this.gameLoop);
         }
 
+        this.lastFrameTime = performance.now(); // Initialiser correctement
+
         const loop = (currentTime) => {
             if (!this.isPaused) {
                 const deltaTime = currentTime - this.lastFrameTime;
-                this.update(deltaTime);
+                // Limiter le deltaTime pour éviter les gros sauts
+                const clampedDeltaTime = Math.min(deltaTime, 50); // Max 50ms par frame
+                this.update(clampedDeltaTime);
                 this.render();
             }
             
@@ -822,36 +888,7 @@ export class GameManager {
             this.ctx.textAlign = 'left';
         }
         
-        // Indicateur de phase COMBAT
-        if (this.gameState.currentState === 'COMBAT') {
-            // Positionnement à droite
-            const uiX = this.canvas.width - 320;
-            const uiY = 10;
-            
-            // Fond semi-transparent
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            this.ctx.fillRect(uiX, uiY, 300, 70);
-            
-            // Bordure
-            this.ctx.strokeStyle = '#ff0000';
-            this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(uiX, uiY, 300, 70);
-            
-            // Texte
-            this.ctx.fillStyle = '#ff0000';
-            this.ctx.font = 'bold 24px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('COMBAT !', uiX + 150, uiY + 30);
-            
-            // Instructions
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = '12px Arial';
-            this.ctx.fillText('Cliquez n\'importe où pour tirer', uiX + 150, uiY + 50);
-            this.ctx.fillText('Rotation automatique des canons', uiX + 150, uiY + 65);
-            
-            // Reset text align
-            this.ctx.textAlign = 'left';
-        }
+        // Plus d'indicateur de phase COMBAT dans le canvas - maintenant dans l'UI à droite
         
     }
 

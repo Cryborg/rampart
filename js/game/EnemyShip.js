@@ -30,7 +30,7 @@ export class EnemyShip {
         
         // IA
         this.aiState = 'seeking'; // seeking, attacking, fleeing, destroyed
-        this.searchRadius = 15; // Rayon de recherche de cibles
+        this.searchRadius = 50; // Rayon de recherche de cibles (augmenté pour être sûr)
         this.lastTargetSearch = 0;
         this.targetSearchInterval = 2000; // Rechercher cible toutes les 2s
         
@@ -95,12 +95,17 @@ export class EnemyShip {
         let closestDistance = Infinity;
         
         for (let player of gameManager.players) {
-            if (player.isDefeated || !player.castle.core) continue;
+            if (player.isDefeated || !player.castle?.core) {
+                console.log(`🚢 Joueur ${player.id} n'a pas de château ou est défait`);
+                continue;
+            }
             
             const distance = this.getDistance(this.x, this.y, player.castle.core.x, player.castle.core.y);
+            console.log(`🚢 Distance au château ${player.id}: ${distance.toFixed(1)} (max: ${this.searchRadius})`);
             if (distance < closestDistance && distance <= this.searchRadius) {
                 closestDistance = distance;
                 closestCastle = player.castle.core;
+                console.log(`🎯 Nouveau château cible: ${player.id} à (${closestCastle.x}, ${closestCastle.y})`);
             }
         }
         
@@ -201,12 +206,25 @@ export class EnemyShip {
         let bestShorePoint = null;
         let bestDistance = Infinity;
         
-        // Chercher le long de la côte (zone de transition terre/eau)
-        const coastStartX = Math.floor(grid.width * 0.5);
-        const coastEndX = Math.floor(grid.width * 0.7);
+        console.log(`🏖️ Recherche point de rivage proche du château (${castleX}, ${castleY})`);
+        
+        // Zone de débarquement TRÈS élargie pour plus de dispersion
+        const zoneCenterY = castleY;
+        const zoneRadius = 8; // ±8 cases au lieu de ±5
+        const zoneMinY = Math.max(1, zoneCenterY - zoneRadius);
+        const zoneMaxY = Math.min(grid.height - 2, zoneCenterY + zoneRadius);
+        
+        console.log(`🏖️ Zone de débarquement élargie: Y=${zoneMinY} à ${zoneMaxY} (rayon=${zoneRadius})`);
+        
+        // Chercher le long de la côte (zone de transition terre/eau) - élargie
+        const coastStartX = Math.floor(grid.width * 0.4); 
+        const coastEndX = Math.floor(grid.width * 0.8);
+        
+        // Collecter TOUS les points de rivage dans la zone élargie
+        const candidateShorePoints = [];
         
         for (let x = coastStartX; x < coastEndX; x++) {
-            for (let y = 1; y < grid.height - 1; y++) {
+            for (let y = zoneMinY; y <= zoneMaxY; y++) {
                 const currentCell = grid.getCell(x, y);
                 const leftCell = grid.getCell(x - 1, y);
                 
@@ -214,27 +232,42 @@ export class EnemyShip {
                 if (currentCell && currentCell.type === 'water' && 
                     leftCell && leftCell.type === 'land') {
                     
-                    const distanceToTarget = this.getDistance(x, y, castleX, castleY);
-                    if (distanceToTarget < bestDistance) {
-                        bestDistance = distanceToTarget;
-                        bestShorePoint = { x, y };
-                    }
+                    candidateShorePoints.push({ x, y });
                 }
             }
         }
         
-        // Si pas de point trouvé, chercher un point d'eau sûr près de la position actuelle
+        console.log(`🏖️ ${candidateShorePoints.length} points de rivage trouvés dans la zone élargie`);
+        
+        // Choisir un point ALÉATOIRE parmi les candidats au lieu du plus proche
+        if (candidateShorePoints.length > 0) {
+            const randomIndex = Math.floor(Math.random() * candidateShorePoints.length);
+            bestShorePoint = candidateShorePoints[randomIndex];
+            console.log(`🎯 Point choisi aléatoirement: (${bestShorePoint.x}, ${bestShorePoint.y}) - index ${randomIndex}/${candidateShorePoints.length-1}`);
+        }
+        
+        
+        
+        // Si pas de point trouvé, naviguer vers la côte ouest (approximation simple)
         if (!bestShorePoint) {
-            // Chercher de l'eau près du bateau
-            for (let radius = 1; radius <= 5; radius++) {
+            console.log(`⚠️ Aucun point de rivage trouvé, navigation vers côte ouest`);
+            
+            // Naviguer vers la zone côtière (où la terre rencontre la mer)
+            // Chercher dans la zone entre terre et mer (zone de transition)
+            const targetX = Math.floor(grid.width * 0.6); // 60% vers l'ouest
+            const targetY = Math.floor(zoneCenterY); // Niveau Y centré sur la zone
+            
+            // Trouver le point d'eau le plus proche de cette zone cible
+            for (let radius = 0; radius <= 10; radius++) {
                 for (let dx = -radius; dx <= radius; dx++) {
                     for (let dy = -radius; dy <= radius; dy++) {
-                        const checkX = Math.floor(this.x) + dx;
-                        const checkY = Math.floor(this.y) + dy;
+                        const checkX = targetX + dx;
+                        const checkY = targetY + dy;
                         
                         if (grid.isValidPosition(checkX, checkY)) {
                             const cell = grid.getCell(checkX, checkY);
                             if (cell && cell.type === 'water') {
+                                console.log(`🎯 Point de navigation trouvé: (${checkX}, ${checkY})`);
                                 return { x: checkX, y: checkY };
                             }
                         }
@@ -243,6 +276,7 @@ export class EnemyShip {
             }
             
             // En dernier recours, rester sur place
+            console.log(`❌ Aucun point de navigation trouvé, reste sur place`);
             return { x: this.x, y: this.y };
         }
         
@@ -459,44 +493,74 @@ export class EnemyShip {
         this.isMoving = this.path.length > 0;
         
         if (this.path.length > 0) {
-            console.log(`🗺️ Chemin calculé vers (${targetX}, ${targetY}) - ${this.path.length} étapes`);
+            console.log(`🗺️ Chemin calculé vers (${targetX}, ${targetY}) - ${this.path.length} étapes, isMoving=${this.isMoving}`);
+            console.log(`📍 Position actuelle: (${this.x.toFixed(1)}, ${this.y.toFixed(1)}), Première étape: (${this.path[0].x}, ${this.path[0].y})`);
+        } else {
+            console.log(`❌ Aucun chemin trouvé depuis (${this.x.toFixed(1)}, ${this.y.toFixed(1)}) vers (${targetX}, ${targetY})`);
         }
     }
 
     findWaterPath(startX, startY, endX, endY, grid) {
-        // Algorithme de pathfinding simple pour navigation maritime
+        // Algorithme A* simplifié pour navigation maritime
         const path = [];
         const visited = new Set();
-        const queue = [{ x: Math.floor(startX), y: Math.floor(startY), path: [] }];
         
-        const maxSteps = 100; // Limite pour éviter les boucles infinies
+        // Utiliser un tableau de priority queue basique (A* avec heuristique)
+        const queue = [{ 
+            x: Math.floor(startX), 
+            y: Math.floor(startY), 
+            path: [], 
+            cost: 0,
+            heuristic: this.getDistance(Math.floor(startX), Math.floor(startY), endX, endY)
+        }];
+        
+        const maxSteps = 500; // Augmenté pour longues distances
         let steps = 0;
+        
+        console.log(`🗺️ Pathfinding depuis (${Math.floor(startX)}, ${Math.floor(startY)}) vers (${endX}, ${endY})`);
+        
+        // Debug initial : vérifier la cellule de départ
+        const startCell = grid.getCell(Math.floor(startX), Math.floor(startY));
+        console.log(`📍 Cellule de départ (${Math.floor(startX)}, ${Math.floor(startY)}): ${startCell ? startCell.type : 'null'}`);
+        
+        // Debug: vérifier quelques cellules vers l'ouest depuis la position de départ
+        for (let i = 0; i < 5; i++) {
+            const checkX = Math.floor(startX) - i;
+            const checkY = Math.floor(startY);
+            if (grid.isValidPosition(checkX, checkY)) {
+                const cell = grid.getCell(checkX, checkY);
+                console.log(`🔍 Cellule (${checkX}, ${checkY}): ${cell ? cell.type : 'null'} - navigable: ${this.canNavigateTo(checkX, checkY, grid)}`);
+            }
+        }
         
         while (queue.length > 0 && steps < maxSteps) {
             steps++;
-            const current = queue.shift();
-            const key = `${current.x},${current.y}`;
             
+            // Tri simple pour A* (prendre le nœud avec le plus petit coût total)
+            queue.sort((a, b) => (a.cost + a.heuristic) - (b.cost + b.heuristic));
+            const current = queue.shift();
+            
+            const key = `${current.x},${current.y}`;
             if (visited.has(key)) continue;
             visited.add(key);
             
             // Arrivé à destination
             const distance = this.getDistance(current.x, current.y, endX, endY);
             if (distance <= 1.5) {
+                console.log(`✅ Chemin trouvé en ${steps} étapes: ${current.path.length} nœuds`);
                 return current.path;
             }
             
-            // Explorer les voisins
+            // Explorer les voisins (priorité aux directions principales pour performance)
             const neighbors = [
-                { x: current.x + 1, y: current.y },
-                { x: current.x - 1, y: current.y },
-                { x: current.x, y: current.y + 1 },
-                { x: current.x, y: current.y - 1 },
-                // Diagonales pour mouvement plus fluide
-                { x: current.x + 1, y: current.y + 1 },
-                { x: current.x - 1, y: current.y - 1 },
-                { x: current.x + 1, y: current.y - 1 },
-                { x: current.x - 1, y: current.y + 1 }
+                { x: current.x - 1, y: current.y },     // Vers l'ouest (priorité)
+                { x: current.x, y: current.y + 1 },     // Sud
+                { x: current.x, y: current.y - 1 },     // Nord
+                { x: current.x + 1, y: current.y },     // Est
+                { x: current.x - 1, y: current.y - 1 }, // Nord-ouest
+                { x: current.x - 1, y: current.y + 1 }, // Sud-ouest
+                { x: current.x + 1, y: current.y - 1 }, // Nord-est
+                { x: current.x + 1, y: current.y + 1 }  // Sud-est
             ];
             
             for (let neighbor of neighbors) {
@@ -505,16 +569,21 @@ export class EnemyShip {
                 const neighborKey = `${neighbor.x},${neighbor.y}`;
                 if (visited.has(neighborKey)) continue;
                 
+                const newCost = current.cost + 1;
+                const heuristic = this.getDistance(neighbor.x, neighbor.y, endX, endY);
+                
                 queue.push({
                     x: neighbor.x,
                     y: neighbor.y,
-                    path: [...current.path, { x: neighbor.x, y: neighbor.y }]
+                    path: [...current.path, { x: neighbor.x, y: neighbor.y }],
+                    cost: newCost,
+                    heuristic: heuristic
                 });
             }
         }
         
-        // Aucun chemin trouvé, rester sur place plutôt que d'aller sur terre
-        console.log(`⚠️ Aucun chemin naval trouvé vers (${endX}, ${endY})`);
+        // Aucun chemin trouvé
+        console.log(`⚠️ Aucun chemin naval trouvé vers (${endX}, ${endY}) après ${steps} étapes`);
         return [];
     }
 
@@ -552,15 +621,28 @@ export class EnemyShip {
     }
 
     updateMovement(deltaTime) {
-        if (!this.isMoving || this.path.length === 0) return;
+        if (!this.isMoving) {
+            console.log(`🚢 Bateau (${this.x.toFixed(1)}, ${this.y.toFixed(1)}) - PAS EN MOUVEMENT (isMoving=false)`);
+            return;
+        }
+        
+        if (this.path.length === 0) {
+            console.log(`🚢 Bateau (${this.x.toFixed(1)}, ${this.y.toFixed(1)}) - PAS DE CHEMIN`);
+            return;
+        }
         
         const currentTarget = this.path[this.pathIndex];
-        if (!currentTarget) return;
+        if (!currentTarget) {
+            console.log(`🚢 Bateau - PAS DE CIBLE COURANTE (pathIndex=${this.pathIndex}, pathLength=${this.path.length})`);
+            return;
+        }
         
         // Calculer la direction vers le prochain point
         const dx = currentTarget.x - this.x;
         const dy = currentTarget.y - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // console.log(`🚢 Mouvement: (${this.x.toFixed(1)}, ${this.y.toFixed(1)}) → (${currentTarget.x}, ${currentTarget.y}) distance=${distance.toFixed(2)}`);
         
         if (distance < 0.1) {
             // Point atteint, passer au suivant
@@ -572,6 +654,7 @@ export class EnemyShip {
                 console.log('🚢 Bateau arrivé à destination');
                 return;
             }
+            console.log(`🚢 Point atteint, passage au suivant (${this.pathIndex}/${this.path.length})`);
             return;
         }
         
@@ -580,15 +663,20 @@ export class EnemyShip {
         let moveX = (dx / distance) * moveDistance;
         let moveY = (dy / distance) * moveDistance;
         
+        // console.log(`🚢 Calcul mouvement: speed=${this.speed}, deltaTime=${deltaTime}, moveDistance=${moveDistance.toFixed(3)}, déplacement=(${moveX.toFixed(3)}, ${moveY.toFixed(3)})`);
+        
         // Vérifier les collisions avec autres bateaux et ajuster la trajectoire
         const avoidanceVector = this.calculateAvoidance();
         if (avoidanceVector) {
             moveX += avoidanceVector.x * 0.3; // 30% de poids pour l'évitement
             moveY += avoidanceVector.y * 0.3;
+            // console.log(`🚢 Évitement appliqué: nouveau déplacement=(${moveX.toFixed(3)}, ${moveY.toFixed(3)})`);
         }
         
         this.x += moveX;
         this.y += moveY;
+        
+        // console.log(`🚢 Nouvelle position: (${this.x.toFixed(1)}, ${this.y.toFixed(1)})`);
         
         // Les bateaux ne changent plus d'orientation
     }
@@ -739,12 +827,43 @@ export class EnemyShip {
         // Barre de vie (4x plus grande)
         this.renderHealthBar(ctx, screenPos.x, screenPos.y - cellSize * 0.7 * shipScale, cellSize * shipScale);
         
-        // Indicateur de cible (debug)
+        // Indicateur du chemin réel (debug)
+        if (this.path && this.path.length > 0) {
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([3, 3]);
+            
+            // Dessiner le chemin complet
+            ctx.beginPath();
+            ctx.moveTo(screenPos.x, screenPos.y);
+            
+            for (let i = 0; i < this.path.length; i++) {
+                const pathPoint = this.path[i];
+                const pathScreenPos = renderer.gridToScreen(pathPoint.x, pathPoint.y);
+                ctx.lineTo(pathScreenPos.x, pathScreenPos.y);
+            }
+            
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Marquer la destination finale en vert
+            if (this.path.length > 0) {
+                const finalDestination = this.path[this.path.length - 1];
+                const finalScreenPos = renderer.gridToScreen(finalDestination.x, finalDestination.y);
+                
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+                ctx.beginPath();
+                ctx.arc(finalScreenPos.x, finalScreenPos.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Indicateur du château cible (debug) - en rouge plus discret
         if (this.target) {
             const targetScreenPos = renderer.gridToScreen(this.target.x, this.target.y);
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.2)';
             ctx.lineWidth = 1;
-            ctx.setLineDash([3, 3]);
+            ctx.setLineDash([5, 5]);
             ctx.beginPath();
             ctx.moveTo(screenPos.x, screenPos.y);
             ctx.lineTo(targetScreenPos.x, targetScreenPos.y);

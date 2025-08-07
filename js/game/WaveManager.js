@@ -92,8 +92,8 @@ export class WaveManager {
         // Spawner depuis le bord droit de l'écran sur toute la hauteur
         const spawnX = this.grid.width - 1; // Tout à droite du canvas
         
-        // Créer des points de spawn dispersés sur toute la hauteur
-        for (let y = 1; y < this.grid.height - 1; y += 2) { // Tous les 2 cases en hauteur
+        // Créer des points de spawn dispersés sur toute la hauteur (éviter les bordures)
+        for (let y = 2; y < this.grid.height - 2; y += 2) { // Tous les 2 cases, éviter bordures
             spawnPoints.push({ 
                 x: spawnX, 
                 y: y, 
@@ -215,19 +215,28 @@ export class WaveManager {
     spawnAllShipsImmediately(shipsToSpawn) {
         const spawnPoints = [...this.waveConfig.spawnPoints]; // Copie des points disponibles
         
+        console.log(`📍 Points de spawn disponibles: ${spawnPoints.length}`);
+        spawnPoints.forEach((point, index) => {
+            console.log(`   Point ${index}: (${point.x}, ${point.y})`);
+        });
+        
         for (let i = 0; i < shipsToSpawn.length; i++) {
             const shipType = shipsToSpawn[i];
             
             // Choisir un point de spawn (en rotation pour éviter l'accumulation)
-            const spawnPoint = spawnPoints[i % spawnPoints.length];
+            const spawnPointIndex = i % spawnPoints.length;
+            const spawnPoint = spawnPoints[spawnPointIndex];
             
             if (spawnPoint) {
-                // Spawner un peu plus loin dans la mer pour qu'ils soient bien visibles
-                const spawnX = spawnPoint.x + Math.random() * 3; // 0-3 cases vers la mer
-                const spawnY = spawnPoint.y + (Math.random() - 0.5) * 1.5; // Légère variation verticale
+                // Position fixe basée sur l'index pour éviter les superpositions
+                const spawnX = spawnPoint.x; // Toujours au bord droit
+                const spawnY = spawnPoint.y + (i * 2.5); // Échelonnement vertical fixe
                 
-                this.createShip(shipType, spawnX, spawnY);
-                console.log(`🚢 ${shipType} spawn à (${spawnX.toFixed(1)}, ${spawnY.toFixed(1)})`);
+                // S'assurer que Y reste dans les limites
+                const clampedY = Math.max(2, Math.min(this.grid.height - 3, spawnY));
+                
+                this.createShip(shipType, spawnX, clampedY);
+                console.log(`🚢 ${shipType} #${i} spawn à (${spawnX.toFixed(1)}, ${clampedY.toFixed(1)}) depuis point ${spawnPointIndex} + offset ${i * 2.5}`);
             }
         }
     }

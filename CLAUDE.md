@@ -40,10 +40,11 @@ Recréation du jeu d'arcade classique Rampart (Atari 1990) en JavaScript ES6 mod
 
 #### Grid (48x36)
 - Types de cellules: water, land, wall, castle-core, cannon, destroyed
-- Algorithme flood-fill pour détection des châteaux fermés
+- **IMPORTANT** : Algorithme flood-fill pour détection des châteaux fermés DOIT vérifier les 8 voisins (orthogonaux + diagonales) - Franck y tient !
 - Validation de placement des pièces et canons 2x2
 - Propriétés par type (walkable, buildable, destructible)
 - Zones constructibles (cannonZone) marquées en doré
+- **DESTRUCTION** : Chaque cellule doit être détruite individuellement, PAS par pièce entière
 
 #### TetrisPieces
 - Pièces spécialisées Rampart (plus petites que Tetris classique)
@@ -147,6 +148,11 @@ npx serve .
 - Détection de fermeture de château robuste
 - Générateur de pièces avec historique anti-répétition
 - Calcul d'emplacements optimaux pour pièces
+
+### Règles importantes de gameplay
+- **L'eau ne bloque PAS le passage** - Une zone touchant de l'eau peut être ouverte
+- Les zones fermées nécessitent des murs se touchant par les côtés (pas juste les coins)
+- Seuls les murs, castle-cores et canons bloquent le passage pour la détection de fermeture
 
 ### Extensibilité
 - Architecture modulaire SOLID

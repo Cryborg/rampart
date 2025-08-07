@@ -51,7 +51,7 @@ export class Renderer {
         const minHeight = 450;
         
         // S'adapter à la hauteur d'écran en priorité, avec un minimum
-        const canvasHeight = Math.max(minHeight, Math.min(availableHeight, 900));
+        let canvasHeight = Math.max(minHeight, Math.min(availableHeight, 900));
         
         // Calculer la largeur proportionnellement au ratio 48:36 de la grille
         const gridRatio = GAME_CONFIG.GRID.WIDTH / GAME_CONFIG.GRID.HEIGHT; // 48/36 = 1.33
@@ -241,13 +241,41 @@ export class Renderer {
     renderDestroyed(x, y) {
         const size = this.cellSize;
         
-        // Draw debris
-        this.ctx.fillStyle = '#666666';
-        for (let i = 0; i < 5; i++) {
-            const debrisX = x + Math.random() * size;
-            const debrisY = y + Math.random() * size;
-            this.ctx.fillRect(Math.round(debrisX), Math.round(debrisY), 2, 2);
+        // Fond de base sombre pour les ruines
+        this.ctx.fillStyle = '#3a3a3a';
+        this.ctx.fillRect(x, y, size, size);
+        
+        // Bordure déchiquetée
+        this.ctx.strokeStyle = '#2a2a2a';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([3, 2]);
+        this.ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+        this.ctx.setLineDash([]);
+        
+        // Débris visibles - plus gros et plus nombreux
+        this.ctx.fillStyle = '#777777';
+        for (let i = 0; i < 8; i++) {
+            const debrisX = x + (Math.sin(i * 0.8) + 1) * size * 0.3 + size * 0.1;
+            const debrisY = y + (Math.cos(i * 0.8) + 1) * size * 0.3 + size * 0.1;
+            const debrisSize = 2 + Math.floor(i % 3);
+            this.ctx.fillRect(Math.round(debrisX), Math.round(debrisY), debrisSize, debrisSize);
         }
+        
+        // Fissures diagonales pour effet dramatique
+        this.ctx.strokeStyle = '#555555';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + size * 0.2, y + size * 0.1);
+        this.ctx.lineTo(x + size * 0.8, y + size * 0.9);
+        this.ctx.moveTo(x + size * 0.1, y + size * 0.7);
+        this.ctx.lineTo(x + size * 0.6, y + size * 0.2);
+        this.ctx.stroke();
+        
+        // Marque rouge de destruction au centre
+        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        this.ctx.beginPath();
+        this.ctx.arc(x + size/2, y + size/2, size * 0.15, 0, Math.PI * 2);
+        this.ctx.fill();
     }
 
     renderGridLines(grid) {

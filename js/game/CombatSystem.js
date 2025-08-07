@@ -15,7 +15,7 @@ export class CombatSystem {
             cannonCooldown: 2000, // Temps entre tirs (2 secondes)
             wallDestruction: true, // Les murs peuvent être détruits
             friendlyFire: true, // Tir ami activé
-            explosionRadius: 1.5, // Rayon d'explosion en cases
+            explosionRadius: 0.1, // Rayon minimal - détruire seulement la cellule touchée
             maxProjectiles: 50 // Limite de projectiles simultanés
         };
         

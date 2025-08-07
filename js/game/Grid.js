@@ -499,7 +499,11 @@ export class Grid {
                     return false;
                 }
                 
-                // Must be inside a closed castle (we'll check this separately)
+                // CRUCIAL: Doit être dans une zone fermée (cannonZone)
+                if (!cell.cannonZone) {
+                    console.log(`❌ Cannot place cannon at (${checkX}, ${checkY}) - not in closed castle`);
+                    return false;
+                }
             }
         }
         return true;
@@ -530,7 +534,7 @@ export class Grid {
         if (!this.isValidPosition(startX, startY)) return [];
 
         const startCell = this.getCell(startX, startY);
-        if (!startCell || startCell.type !== targetType) return [];
+        if (!startCell || !this.canPassThrough(startCell.type)) return [];
 
         const visited = new Set();
         const stack = [{ x: startX, y: startY }];
@@ -544,7 +548,7 @@ export class Grid {
             visited.add(key);
 
             const cell = this.getCell(x, y);
-            if (!cell || cell.type !== targetType) continue;
+            if (!cell || !this.canPassThrough(cell.type)) continue;
 
             filledCells.push({ x, y });
 
@@ -565,27 +569,73 @@ export class Grid {
         return filledCells;
     }
 
+    // Flood-fill avec détection de fermeture intégrée
+    floodFillWithClosureCheck(startX, startY, visited) {
+        if (!this.isValidPosition(startX, startY) || visited[startY][startX]) {
+            return { area: [], isClosed: false };
+        }
+        
+        const startCell = this.getCell(startX, startY);
+        if (!startCell || !this.canPassThrough(startCell.type)) {
+            return { area: [], isClosed: false };
+        }
+
+        const stack = [[startX, startY]];
+        const area = [];
+        let isClosed = true;
+        visited[startY][startX] = true;
+
+        while (stack.length > 0) {
+            const [x, y] = stack.pop();
+            area.push({ x, y });
+
+            // Vérifier les 8 directions (y compris diagonales)
+            const directions = [
+                [-1, -1], [-1, 0], [-1, 1],
+                [0, -1],           [0, 1],
+                [1, -1],  [1, 0],  [1, 1]
+            ];
+
+            for (const [dx, dy] of directions) {
+                const nx = x + dx;
+                const ny = y + dy;
+
+                // Si on atteint le bord de la grille, la zone n'est pas fermée
+                if (!this.isValidPosition(nx, ny)) {
+                    isClosed = false;
+                    continue;
+                }
+
+                // Si on n'a pas déjà visité cette cellule et qu'on peut la traverser
+                if (!visited[ny][nx]) {
+                    const neighborCell = this.getCell(nx, ny);
+                    if (neighborCell && this.canPassThrough(neighborCell.type)) {
+                        visited[ny][nx] = true;
+                        stack.push([nx, ny]);
+                    }
+                }
+            }
+        }
+
+        return { area, isClosed };
+    }
+
     findEnclosedAreas() {
-        const visited = new Set();
+        const visited = Array(this.height).fill().map(() => Array(this.width).fill(false));
         const enclosedAreas = [];
 
-        for (let y = 1; y < this.height - 1; y++) {
-            for (let x = 1; x < this.width - 1; x++) {
-                const key = `${x},${y}`;
-                if (visited.has(key)) continue;
-
+        // Parcourir TOUTE la grille pour trouver les zones fermées
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
                 const cell = this.getCell(x, y);
-                if (cell && cell.type === CELL_TYPES.LAND) {
-                    const area = this.floodFill(x, y, CELL_TYPES.LAND, null);
+                
+                // Chercher des zones de terre non visitées
+                if (!visited[y][x] && cell && this.canPassThrough(cell.type)) {
+                    const result = this.floodFillWithClosureCheck(x, y, visited);
                     
-                    if (this.isAreaEnclosed(area)) {
-                        enclosedAreas.push(area);
+                    if (result.isClosed && result.area.length > 0) {
+                        enclosedAreas.push(result.area);
                     }
-
-                    // Mark all cells in this area as visited
-                    area.forEach(({ x, y }) => {
-                        visited.add(`${x},${y}`);
-                    });
                 }
             }
         }
@@ -652,36 +702,19 @@ export class Grid {
         return castles;
     }
 
-    isAreaEnclosed(area) {
-        // Check if area is completely surrounded by walls
-        const areaSet = new Set(area.map(({ x, y }) => `${x},${y}`));
-
-        for (const { x, y } of area) {
-            // Vérifier les 8 voisins (orthogonaux + diagonaux) pour une vraie fermeture
-            const neighbors = [
-                { x: x + 1, y }, { x: x - 1, y },        // horizontaux
-                { x, y: y + 1 }, { x, y: y - 1 },        // verticaux
-                { x: x + 1, y: y + 1 }, { x: x - 1, y: y - 1 },  // diagonales
-                { x: x + 1, y: y - 1 }, { x: x - 1, y: y + 1 }   // diagonales
-            ];
-
-            for (const neighbor of neighbors) {
-                if (!this.isValidPosition(neighbor.x, neighbor.y)) {
-                    return false; // Touches border
-                }
-
-                const neighborKey = `${neighbor.x},${neighbor.y}`;
-                if (!areaSet.has(neighborKey)) {
-                    const neighborCell = this.getCell(neighbor.x, neighbor.y);
-                    // Accepter les murs ET les castle-cores comme barrières
-                    if (neighborCell.type !== CELL_TYPES.WALL && neighborCell.type !== CELL_TYPES.CASTLE_CORE) {
-                        return false; // Not enclosed - il y a une ouverture
-                    }
-                }
-            }
+    // Types de cellules qu'on peut traverser
+    canPassThrough(cellType) {
+        const canPass = cellType === CELL_TYPES.LAND || 
+                       cellType === CELL_TYPES.WATER || 
+                       cellType === CELL_TYPES.DESTROYED ||
+                       cellType === CELL_TYPES.CANNON;
+        // DEBUG temporaire
+        if (cellType === CELL_TYPES.CANNON) {
+            console.log('🎯 Canon détecté comme TRAVERSABLE (nouvelle logique)');
         }
-
-        return true;
+        return canPass;
+        // Seuls les murs et castle-cores BLOQUENT le passage
+        // Les canons sont des objets DANS la zone fermée, pas des murs
     }
 
     getCellsOfType(type, playerId = null) {

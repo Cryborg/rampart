@@ -8,10 +8,63 @@ export class PlaceCannonPhase extends BasePhase {
 
     onEnter() {
         console.log('🎯 Entering PLACE_CANNONS phase');
+        
+        // CRUCIAL: Recalculer les zones fermées après les destructions et réparations
+        this.recalculateClosedCastles();
     }
 
     onExit() {
         console.log('🎯 Exiting PLACE_CANNONS phase');
+    }
+
+    recalculateClosedCastles() {
+        console.log('🔄 Recalcul des zones fermées pour placement canons...');
+        
+        // 1. Vider toutes les anciennes zones de canons
+        this.clearAllCannonZones();
+        
+        // 2. Recalculer les châteaux fermés
+        const closedCastles = this.gameManager.grid.findClosedCastles();
+        
+        console.log(`🏰 ${closedCastles.length} château(x) fermé(s) trouvé(s) après recalcul`);
+        
+        // 3. Remarquer les nouvelles zones constructibles
+        if (closedCastles.length > 0) {
+            closedCastles.forEach((castle, index) => {
+                console.log(`🏰 Château ${index + 1}: Zone de ${castle.area.length} cellules`);
+                this.highlightConstructibleArea(castle.area);
+            });
+            
+            console.log('🎯 Zones constructibles mises à jour !');
+        } else {
+            console.log('⚠️ Aucun château fermé - pas de zone constructible !');
+        }
+    }
+    
+    clearAllCannonZones() {
+        let clearedCount = 0;
+        for (let y = 0; y < this.gameManager.grid.height; y++) {
+            for (let x = 0; x < this.gameManager.grid.width; x++) {
+                const cell = this.gameManager.grid.getCell(x, y);
+                if (cell && cell.cannonZone) {
+                    delete cell.cannonZone;
+                    clearedCount++;
+                }
+            }
+        }
+        console.log(`🧹 ${clearedCount} anciennes zones de canons effacées`);
+    }
+    
+    highlightConstructibleArea(area) {
+        let markedCount = 0;
+        area.forEach(({x, y}) => {
+            const cell = this.gameManager.grid.getCell(x, y);
+            if (cell && cell.type === 'land') {
+                cell.cannonZone = true;
+                markedCount++;
+            }
+        });
+        console.log(`✨ ${markedCount} cellules marquées comme zone constructible`);
     }
 
     handleMouseMove(gridPos) {
