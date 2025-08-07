@@ -406,8 +406,10 @@ export class GameManager {
         // Marquer toutes les cellules de la zone comme constructibles
         area.forEach(({x, y}) => {
             const cell = this.grid.getCell(x, y);
-            if (cell && cell.type === 'land') {
+            // Inclure: terre libre, canons existants, château, et cellules détruites
+            if (cell && (cell.type === 'land' || cell.type === 'cannon' || cell.type === 'castle-core' || cell.type === 'destroyed')) {
                 // Ajouter une propriété pour marquer comme zone de canons
+                // Important: inclure TOUS les types de cellules dans les zones fermées !
                 cell.cannonZone = true;
             }
         });
@@ -577,9 +579,7 @@ export class GameManager {
     startCannonPlacementPhase() {
         console.log('🎯 Phase placement des canons démarrée');
         
-        // CRUCIAL : Recalculer les zones fermées après le combat
-        // Les cellules détruites peuvent avoir ouvert des châteaux
-        this.recalculateCannonZones();
+        // Les zones fermées ont déjà été recalculées à la fin du combat
         
         // Réinitialiser le compteur de cette phase
         this.cannonsPlacedThisPhase = 0;
@@ -627,6 +627,8 @@ export class GameManager {
     onWaveEnd(waveNumber, stats) {
         console.log(`🌊 Fin de vague ${waveNumber}:`, stats);
         
+        // Le recalcul des zones se fera automatiquement dans le callback d'état (oldState === 'COMBAT')
+        
         // Transition vers la réparation après un délai
         setTimeout(() => {
             console.log('⚔️ Combat terminé ! Transition vers réparation.');
@@ -659,16 +661,29 @@ export class GameManager {
                 this.clearRepairTimer();
             }
             
+            if (oldState === 'COMBAT') {
+                // CRUCIAL : Recalculer les zones fermées à la fin du combat
+                // Couvre le cas du timeout automatique (pas seulement onWaveEnd)
+                console.log('🔄 Recalcul post-combat des zones fermées (callback d\'état)...');
+                this.recalculateCannonZones();
+            }
+            
             if (newState === 'REPAIR') {
                 this.startRepairPhase();
+                // Cacher le curseur pendant la réparation
+                this.renderer.setCursorVisibility(false);
             }
             
             if (newState === 'COMBAT') {
                 this.startCombatPhase();
+                // Montrer le curseur pendant le combat (visée)
+                this.renderer.setCursorVisibility(true);
             }
             
             if (newState === 'PLACE_CANNONS') {
                 this.startCannonPlacementPhase();
+                // Cacher le curseur pendant le placement des canons
+                this.renderer.setCursorVisibility(false);
             }
         });
         
@@ -933,8 +948,11 @@ export class GameManager {
     }
 
     renderCannonPreview(gridPos) {
+        // Calculer le nombre de canons restants pour cette phase
+        const cannonsLeft = this.maxCannonsThisPhase - this.cannonsPlacedThisPhase;
+        
         // Déléguer au renderer pour utiliser le bon contexte et les bons offsets
-        this.renderer.renderCannonPreview(gridPos, (x, y) => this.canPlaceCannonAt(x, y));
+        this.renderer.renderCannonPreview(gridPos, (x, y) => this.canPlaceCannonAt(x, y), cannonsLeft);
     }
 
     clearRepairTimer() {

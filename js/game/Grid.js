@@ -707,14 +707,15 @@ export class Grid {
         const canPass = cellType === CELL_TYPES.LAND || 
                        cellType === CELL_TYPES.WATER || 
                        cellType === CELL_TYPES.DESTROYED ||
-                       cellType === CELL_TYPES.CANNON;
+                       cellType === CELL_TYPES.CANNON ||
+                       cellType === CELL_TYPES.CASTLE_CORE;
         // DEBUG temporaire
-        if (cellType === CELL_TYPES.CANNON) {
-            console.log('🎯 Canon détecté comme TRAVERSABLE (nouvelle logique)');
+        if (cellType === CELL_TYPES.CANNON || cellType === CELL_TYPES.CASTLE_CORE) {
+            console.log(`🎯 ${cellType} détecté comme TRAVERSABLE (nouvelle logique)`);
         }
         return canPass;
-        // Seuls les murs et castle-cores BLOQUENT le passage
-        // Les canons sont des objets DANS la zone fermée, pas des murs
+        // Seuls les MURS bloquent le passage
+        // Les canons et châteaux sont des objets DANS la zone fermée, pas des murs
     }
 
     getCellsOfType(type, playerId = null) {

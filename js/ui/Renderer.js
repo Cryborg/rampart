@@ -335,7 +335,7 @@ export class Renderer {
         }
     }
 
-    renderPiecePreview(piece, x, y, color, alpha = 0.7) {
+    renderPiecePreview(piece, x, y, color, alpha = 1.0) {
         if (!piece || !piece.shape) return;
         
         this.ctx.globalAlpha = alpha;
@@ -373,7 +373,7 @@ export class Renderer {
         this.ctx.strokeRect(Math.round(screenX), Math.round(screenY), Math.round(size), Math.round(size));
     }
 
-    renderCannonPreview(gridPos, canPlaceCallback) {
+    renderCannonPreview(gridPos, canPlaceCallback, remainingCannons = 0) {
         // Vérifier si on peut placer un canon à cette position
         const canPlace = canPlaceCallback(gridPos.x, gridPos.y);
         
@@ -416,6 +416,39 @@ export class Renderer {
             this.ctx.fillStyle = '#2c1810';
             this.ctx.fillRect(Math.round(centerX - 2), Math.round(centerY - 6), 4, 4);
         }
+        
+        // Afficher le nombre de canons restants - GROS et visible !
+        if (remainingCannons > 0) {
+            const centerX = topLeftX + this.cellSize;
+            const centerY = topLeftY + this.cellSize;
+            
+            // Fond noir qui couvre presque toute la zone 2x2
+            const bgSize = this.cellSize * 1.5;
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            this.ctx.fillRect(
+                Math.round(centerX - bgSize/2), 
+                Math.round(centerY - bgSize/2), 
+                Math.round(bgSize), 
+                Math.round(bgSize)
+            );
+            
+            // Texte du nombre - TRÈS GROS
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = 'bold 28px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(remainingCannons.toString(), Math.round(centerX), Math.round(centerY));
+            
+            // Contour pour encore mieux voir
+            this.ctx.strokeStyle = '#ffff00'; // Jaune pour bien contraster
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeText(remainingCannons.toString(), Math.round(centerX), Math.round(centerY));
+        }
+    }
+
+    setCursorVisibility(visible) {
+        // Cacher/montrer le curseur de la souris
+        this.canvas.style.cursor = visible ? 'crosshair' : 'none';
     }
 
     screenToGrid(canvasX, canvasY) {
