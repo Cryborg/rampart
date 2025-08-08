@@ -1,5 +1,7 @@
 import { EnemyShip, ShipFactory } from './EnemyShip.js';
 import { CELL_TYPES } from './Grid.js';
+import { GAME_CONFIG, WAVE_PATTERNS } from '../config/GameConstants.js';
+import { shuffleArray } from '../utils/GameUtils.js';
 
 export class WaveManager {
     constructor(gameManager) {
@@ -12,47 +14,23 @@ export class WaveManager {
         this.landUnits = []; // Troupes terrestres débarquées
         this.waveActive = false;
         this.waveStartTime = 0;
-        this.waveDuration = 30000; // 30 secondes par vague
         
         // Configuration des vagues
+        const waveConfig = GAME_CONFIG.WAVES;
         this.waveConfig = {
-            spawnInterval: 2000, // Temps entre spawns (ms)
+            spawnInterval: waveConfig.SPAWN_INTERVAL,
             lastSpawnTime: 0,
-            maxEnemies: 8, // Maximum d'ennemis simultanés
+            maxEnemies: waveConfig.MAX_ENEMIES,
             spawnPoints: [], // Points de spawn (calculés dynamiquement)
-            difficultyScaling: 1.2 // Multiplicateur de difficulté par vague
+            difficultyScaling: waveConfig.DIFFICULTY_SCALING
         };
         
-        // Patterns de vagues
-        this.wavePatterns = this.initializeWavePatterns();
+        // Durée des vagues
+        this.waveDuration = waveConfig.DURATION;
         
         console.log('🌊 WaveManager initialisé');
     }
 
-    initializeWavePatterns() {
-        return {
-            // NIVEAU 1: Seulement des FAIBLES (5 HP) - basic et fast
-            1: { basic: 3, fast: 0, heavy: 0, artillery: 0 },
-            2: { basic: 3, fast: 1, heavy: 0, artillery: 0 },
-            3: { basic: 2, fast: 2, heavy: 0, artillery: 0 },
-            4: { basic: 4, fast: 2, heavy: 0, artillery: 0 },
-            
-            // NIVEAU 2: Ajout des MOYENS (10 HP) - heavy ships
-            5: { basic: 3, fast: 1, heavy: 1, artillery: 0 },
-            6: { basic: 3, fast: 2, heavy: 1, artillery: 0 },
-            7: { basic: 2, fast: 2, heavy: 2, artillery: 0 },
-            8: { basic: 4, fast: 1, heavy: 2, artillery: 0 },
-            
-            // NIVEAU 3: Ajout des FORTS (15 HP) - artillery ships
-            9: { basic: 2, fast: 1, heavy: 2, artillery: 1 },
-            10: { basic: 3, fast: 2, heavy: 2, artillery: 1 },
-            11: { basic: 2, fast: 1, heavy: 3, artillery: 1 },
-            12: { basic: 4, fast: 2, heavy: 2, artillery: 2 },
-            
-            // Vagues suivantes: tous types mélangés avec augmentation progressive
-            default: { basic: 5, fast: 3, heavy: 3, artillery: 2 }
-        };
-    }
 
     startWave(waveNumber = null) {
         if (this.waveActive) {
@@ -193,7 +171,7 @@ export class WaveManager {
     }
 
     getWavePattern(waveNumber) {
-        const basePattern = this.wavePatterns[waveNumber] || this.wavePatterns.default;
+        const basePattern = WAVE_PATTERNS[waveNumber] || WAVE_PATTERNS.default;
         const scaling = Math.pow(this.waveConfig.difficultyScaling, Math.max(0, waveNumber - 5));
         
         // Appliquer le scaling de difficulté
@@ -217,7 +195,7 @@ export class WaveManager {
         }
         
         // Mélanger pour plus de variété
-        this.shuffleArray(shipsToSpawn);
+        shuffleArray(shipsToSpawn);
         
         // Spawner tous les bateaux immédiatement au début de la vague
         this.spawnAllShipsImmediately(shipsToSpawn);
@@ -508,14 +486,7 @@ export class WaveManager {
         ctx.fillText(`Troupes: ${this.landUnits.length}`, x + 10, y + 80);
     }
 
-    // Utilitaires
-    
-    shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-    }
+    // Utilitaires (maintenant dans GameUtils)
 
     // État et sérialisation
     

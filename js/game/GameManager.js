@@ -12,7 +12,7 @@ export class GameManager {
     constructor(uiManager) {
         this.uiManager = uiManager;
         this.gameState = new GameState();
-        this.grid = new Grid(GAME_CONFIG.GRID.WIDTH, GAME_CONFIG.GRID.HEIGHT);
+        this.grid = new Grid(GAME_CONFIG.GRID_WIDTH, GAME_CONFIG.GRID_HEIGHT);
         this.renderer = null;
         this.inputHandler = null;
         
@@ -217,7 +217,8 @@ export class GameManager {
                     const newCannon = {
                         x: gridPos.x,
                         y: gridPos.y,
-                        firing: false
+                        firing: false,
+                        canFire: true
                     };
                     this.players[this.currentPlayer].cannons.push(newCannon);
                     console.log(`🎯 Canon ajouté à la liste du joueur ${this.currentPlayer}: (${gridPos.x}, ${gridPos.y}). Total: ${this.players[this.currentPlayer].cannons.length}`);
@@ -247,7 +248,7 @@ export class GameManager {
 
     canPlaceCannonAt(x, y) {
         // Validation des coordonnées dans les limites de la grille
-        if (x < 0 || y < 0 || x >= GAME_CONFIG.GRID.WIDTH - 1 || y >= GAME_CONFIG.GRID.HEIGHT - 1) {
+        if (x < 0 || y < 0 || x >= GAME_CONFIG.GRID_WIDTH - 1 || y >= GAME_CONFIG.GRID_HEIGHT - 1) {
             return false;
         }
         
@@ -371,8 +372,11 @@ export class GameManager {
                     this.grid.placePiece(player.currentPiece, pieceX, pieceY, player.id);
                     player.stats.piecesPlaced++;
                     
-                    // Check if castle is now closed
+                    // Check if castle is now closed and update cannon zones
                     this.checkCastleClosure();
+                    
+                    // CORRECTION: Après reconstruction, vérifier quels canons peuvent à nouveau tirer
+                    this.validatePlayerCannons();
                     
                     // Generate next piece
                     player.currentPiece = this.pieceGenerator.generatePiece(player.id);
@@ -384,6 +388,59 @@ export class GameManager {
         } else if (button === 2) { // Right click - rotate
             this.rotatePiece();
         }
+    }
+
+    /**
+     * CORRECTION: Marque les canons comme utilisables/inutilisables selon leur zone,
+     * mais ne les supprime JAMAIS de la liste (sauf s'ils sont vraiment détruits)
+     */
+    validatePlayerCannons() {
+        this.players.forEach(player => {
+            let activeCount = 0;
+            let inactiveCount = 0;
+            
+            console.log(`🔍 DEBUG: Validation canons joueur ${player.id} - ${player.cannons.length} canons à vérifier`);
+            
+            player.cannons.forEach((cannon, i) => {
+                // Vérifier si ce canon est dans une zone fermée
+                let cannonInClosedZone = true;
+                let cannonZoneCells = 0;
+                
+                for (let dx = 0; dx < 2; dx++) {
+                    for (let dy = 0; dy < 2; dy++) {
+                        const cell = this.grid.getCell(cannon.x + dx, cannon.y + dy);
+                        if (!cell) {
+                            cannonInClosedZone = false;
+                            break;
+                        }
+                        if (cell.cannonZone) {
+                            cannonZoneCells++;
+                        }
+                        if (!cell.cannonZone) {
+                            cannonInClosedZone = false;
+                        }
+                    }
+                    if (!cannonInClosedZone) break;
+                }
+                
+                // CORRECTION: Marquer comme actif/inactif au lieu de supprimer
+                cannon.canFire = cannonInClosedZone;
+                
+                if (cannonInClosedZone) {
+                    activeCount++;
+                } else {
+                    inactiveCount++;
+                }
+                
+                console.log(`  Canon ${i} (${cannon.x},${cannon.y}): canFire=${cannon.canFire} (${cannonZoneCells}/4 cellules)`);
+            });
+            
+            console.log(`🎯 Joueur ${player.id}: ${activeCount} canons actifs, ${inactiveCount} inactifs (total: ${player.cannons.length})`);
+            
+            if (inactiveCount > 0) {
+                console.log(`⚠️ ${inactiveCount} canon(s) temporairement désactivé(s) - répare ton château !`);
+            }
+        });
     }
 
     checkCastleClosure() {
@@ -401,10 +458,10 @@ export class GameManager {
             console.log('🎯 Zones constructibles colorées ! Continue à construire jusqu\'à la fin du timer.');
             
             // Réactiver les canons qui sont maintenant dans des zones fermées
-            this.cleanupCanonsOutsideClosedCastles();
+            this.validatePlayerCannons();
         } else {
-            // Pas de zones fermées, mais on cleanup quand même pour être sûr
-            this.cleanupCanonsOutsideClosedCastles();
+            // Pas de zones fermées, mais on validate quand même pour être sûr
+            this.validatePlayerCannons();
         }
     }
 
@@ -451,36 +508,11 @@ export class GameManager {
             console.log('🏚️ Aucun château fermé détecté - tous les châteaux ont été ouverts !');
         }
         
-        // CRUCIAL : Nettoyer les canons qui ne sont plus dans des zones fermées
+        // CRUCIAL : Valider les canons selon les nouvelles zones fermées
         // Ceci se fait APRÈS le recalcul, donc on connaît les vraies zones ouvertes
-        this.cleanupCanonsOutsideClosedCastles();
+        this.validatePlayerCannons();
     }
 
-    cleanupCanonsOutsideClosedCastles() {
-        this.players.forEach(player => {
-            const initialCannonCount = player.cannons.length;
-            
-            // Filtrer les canons qui sont encore dans des zones fermées
-            player.cannons = player.cannons.filter(cannon => {
-                // Vérifier si le canon 2x2 est entièrement dans une zone fermée
-                for (let dx = 0; dx < 2; dx++) {
-                    for (let dy = 0; dy < 2; dy++) {
-                        const cell = this.grid.getCell(cannon.x + dx, cannon.y + dy);
-                        if (!cell || !cell.cannonZone) {
-                            console.log(`🎯❌ Canon à (${cannon.x}, ${cannon.y}) supprimé - plus dans zone fermée`);
-                            return false; // Canon pas entièrement dans zone fermée
-                        }
-                    }
-                }
-                return true; // Canon OK, reste dans la liste
-            });
-            
-            const removedCannons = initialCannonCount - player.cannons.length;
-            if (removedCannons > 0) {
-                console.log(`🎯🗑️ Joueur ${player.id}: ${removedCannons} canon(s) supprimé(s) (hors zones fermées)`);
-            }
-        });
-    }
 
     rotatePiece() {
         const player = this.players[this.currentPlayer];

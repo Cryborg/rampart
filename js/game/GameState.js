@@ -78,6 +78,10 @@ export class GameState {
                 this.transition(GAME_STATES.COMBAT);
                 break;
             case GAME_STATES.COMBAT:
+                // IMPORTANT: Valider les canons après le combat avant de passer en réparation
+                if (this.gameManager.combatSystem) {
+                    this.gameManager.combatSystem.validateCannonsAfterCombat();
+                }
                 this.transition(GAME_STATES.REPAIR);
                 break;
             case GAME_STATES.REPAIR:

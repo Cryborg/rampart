@@ -1,5 +1,6 @@
 import { CELL_TYPES, CELL_PROPERTIES } from '../game/Grid.js';
-import { GAME_CONFIG, CoordinateUtils } from '../config/GameConstants.js';
+import { GAME_CONFIG } from '../config/GameConstants.js';
+import { adjustBrightness, rgbToHex, hexToRgb } from '../utils/GameUtils.js';
 
 export class Renderer {
     constructor(canvas, ctx) {
@@ -54,7 +55,7 @@ export class Renderer {
         let canvasHeight = Math.max(minHeight, Math.min(availableHeight, 900));
         
         // Calculer la largeur proportionnellement au ratio 48:36 de la grille
-        const gridRatio = GAME_CONFIG.GRID.WIDTH / GAME_CONFIG.GRID.HEIGHT; // 48/36 = 1.33
+        const gridRatio = GAME_CONFIG.GRID_WIDTH / GAME_CONFIG.GRID_HEIGHT; // 48/36 = 1.33
         let canvasWidth = canvasHeight * gridRatio;
         
         // S'assurer que la largeur ne dépasse pas l'espace disponible
@@ -71,13 +72,13 @@ export class Renderer {
         this.canvas.height = Math.floor(canvasHeight);
         
         // Calcul cellSize pour grille avec constantes - forcer entier pour grilles régulières
-        const cellSizeX = this.canvas.width / GAME_CONFIG.GRID.WIDTH;
-        const cellSizeY = this.canvas.height / GAME_CONFIG.GRID.HEIGHT; 
+        const cellSizeX = this.canvas.width / GAME_CONFIG.GRID_WIDTH;
+        const cellSizeY = this.canvas.height / GAME_CONFIG.GRID_HEIGHT; 
         this.cellSize = Math.floor(Math.min(cellSizeX, cellSizeY)); // Forcer entier
         
         // Centrer la grille dans le canvas
-        const gridWidth = GAME_CONFIG.GRID.WIDTH * this.cellSize;
-        const gridHeight = GAME_CONFIG.GRID.HEIGHT * this.cellSize;
+        const gridWidth = GAME_CONFIG.GRID_WIDTH * this.cellSize;
+        const gridHeight = GAME_CONFIG.GRID_HEIGHT * this.cellSize;
         this.gridOffsetX = (this.canvas.width - gridWidth) / 2;
         this.gridOffsetY = (this.canvas.height - gridHeight) / 2;
         
@@ -145,13 +146,13 @@ export class Renderer {
         /*
         if (cell && cell.type && cell.type === 'water') {
             const wave = Math.sin(Date.now() * 0.002 + cell.x * 0.3 + cell.y * 0.2) * 0.15;
-            color = this.adjustBrightness(color, wave);
+            color = adjustBrightness(color, wave);
         }
         */
         
         // Damaged cells are darker
         if (cell.health < 1 && cell.isDestructible()) {
-            color = this.adjustBrightness(color, -0.3);
+            color = adjustBrightness(color, -0.3);
         }
         
         return color;
@@ -382,7 +383,7 @@ export class Renderer {
                     this.ctx.fillRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
                     
                     // Add border (plus discret)
-                    this.ctx.strokeStyle = this.adjustBrightness(color, 0.5); // Plus clair
+                    this.ctx.strokeStyle = adjustBrightness(color, 0.5); // Plus clair
                     this.ctx.lineWidth = 1; // Plus fin
                     this.ctx.strokeRect(Math.round(screenX), Math.round(screenY), Math.round(size - 1), Math.round(size - 1));
                 }
@@ -486,8 +487,8 @@ export class Renderer {
         const rawGridY = Math.floor((canvasY - this.gridOffsetY) / this.cellSize);
         
         // Clamping intelligent dans les limites réelles de la grille
-        const gridX = Math.max(0, Math.min(GAME_CONFIG.GRID.MAX_X, rawGridX));
-        const gridY = Math.max(0, Math.min(GAME_CONFIG.GRID.MAX_Y, rawGridY));
+        const gridX = Math.max(0, Math.min(GAME_CONFIG.GRID_WIDTH - 1, rawGridX));
+        const gridY = Math.max(0, Math.min(GAME_CONFIG.GRID_HEIGHT - 1, rawGridY));
         
         return { x: gridX, y: gridY };
     }
@@ -557,8 +558,8 @@ export class Renderer {
 
     // Utility methods
     tintColor(baseColor, tintColor, strength = 0.3) {
-        const base = this.hexToRgb(baseColor);
-        const tint = this.hexToRgb(tintColor);
+        const base = hexToRgb(baseColor);
+        const tint = hexToRgb(tintColor);
         
         if (!base || !tint) return baseColor;
         
@@ -566,32 +567,10 @@ export class Renderer {
         const g = Math.round(base.g * (1 - strength) + tint.g * strength);
         const b = Math.round(base.b * (1 - strength) + tint.b * strength);
         
-        return this.rgbToHex(r, g, b);
+        return rgbToHex(r, g, b);
     }
 
-    adjustBrightness(color, amount) {
-        const rgb = this.hexToRgb(color);
-        if (!rgb) return color;
-        
-        const r = Math.max(0, Math.min(255, rgb.r + amount * 255));
-        const g = Math.max(0, Math.min(255, rgb.g + amount * 255));
-        const b = Math.max(0, Math.min(255, rgb.b + amount * 255));
-        
-        return this.rgbToHex(r, g, b);
-    }
-
-    hexToRgb(hex) {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-            r: parseInt(result[1], 16),
-            g: parseInt(result[2], 16),
-            b: parseInt(result[3], 16)
-        } : null;
-    }
-
-    rgbToHex(r, g, b) {
-        return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-    }
+    // Méthodes de couleur maintenant centralisées dans GameUtils
 
     getPlayerColor(playerId) {
         const colors = ['#ff6b35', '#004e89', '#2ecc71'];

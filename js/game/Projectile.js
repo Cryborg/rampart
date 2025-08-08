@@ -1,3 +1,6 @@
+import { GAME_CONFIG } from '../config/GameConstants.js';
+import { hexToRgba, adjustBrightness } from '../utils/GameUtils.js';
+
 export class Projectile {
     constructor(startX, startY, targetX, targetY, config = {}) {
         this.startX = startX;
@@ -8,17 +11,17 @@ export class Projectile {
         this.targetY = targetY;
         
         // Configuration du projectile
-        this.speed = config.speed || 8; // Cases par seconde
+        this.speed = config.speed || GAME_CONFIG.COMBAT.ENEMY_PROJECTILE_SPEED;
         this.damage = config.damage || 1;
         this.size = config.size || 4; // Pixels de rayon
-        this.color = config.color || '#ff6b35';
+        this.color = config.color || GAME_CONFIG.COLORS.PLAYER_PROJECTILE;
         this.type = config.type || 'cannonball'; // cannonball, arrow, etc.
         
         // État
         this.active = true;
         this.hasHit = false;
         this.timeAlive = 0;
-        this.maxLifetime = config.maxLifetime || 5000; // 5 secondes max
+        this.maxLifetime = config.maxLifetime || GAME_CONFIG.COMBAT.PROJECTILE_LIFETIME;
         
         // Calcul de la trajectoire
         this.calculateTrajectory();
@@ -135,7 +138,7 @@ export class Projectile {
         ctx.fill();
         
         // Ombre/relief
-        ctx.fillStyle = this.adjustBrightness(this.color, -0.3);
+        ctx.fillStyle = adjustBrightness(this.color, -0.3);
         ctx.beginPath();
         ctx.arc(screenX + 1, screenY + 1, this.size * 0.7, 0, Math.PI * 2);
         ctx.fill();
@@ -179,7 +182,7 @@ export class Projectile {
         const trailStartX = currentPos.x - this.directionX * trailLength;
         const trailStartY = currentPos.y - this.directionY * trailLength;
         
-        ctx.strokeStyle = this.adjustAlpha(this.color, 0.3);
+        ctx.strokeStyle = hexToRgba(this.color, 0.3);
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(trailStartX, trailStartY);
@@ -187,22 +190,7 @@ export class Projectile {
         ctx.stroke();
     }
 
-    // Utilitaires de couleur
-    adjustBrightness(color, amount) {
-        // Version simplifiée - en vrai on devrait parser hex
-        return color; // Pour l'instant
-    }
-
-    adjustAlpha(color, alpha) {
-        // Convertir couleur en rgba avec alpha
-        if (color.startsWith('#')) {
-            const r = parseInt(color.slice(1, 3), 16);
-            const g = parseInt(color.slice(3, 5), 16);
-            const b = parseInt(color.slice(5, 7), 16);
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        }
-        return color;
-    }
+    // Utilitaires de couleur maintenant dans GameUtils
 
     // Méthodes de collision
     isCollidingWith(x, y, radius = 0.5) {

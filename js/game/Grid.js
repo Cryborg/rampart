@@ -508,6 +508,7 @@ export class Grid {
 
         const placedCells = [];
         
+        // Placer la pièce Tetris normalement
         for (let py = 0; py < piece.shape.length; py++) {
             for (let px = 0; px < piece.shape[py].length; px++) {
                 if (piece.shape[py][px] === 1) {
@@ -520,7 +521,7 @@ export class Grid {
             }
         }
         
-        return placedCells;
+        return placedCells; // Retour simple, pas de restauration automatique de canons
     }
 
     canPlaceCannon(x, y, playerId = null) {
@@ -772,6 +773,7 @@ export class Grid {
         }
         return cells;
     }
+
 
     getNeighbors(x, y, includediagonal = false) {
         const neighbors = [];

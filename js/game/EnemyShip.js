@@ -1,27 +1,10 @@
 import { Projectile } from './Projectile.js';
 import { CELL_TYPES } from './Grid.js';
+import { GAME_CONFIG } from '../config/GameConstants.js';
+import { getDistance, Logger } from '../utils/GameUtils.js';
 
-// Niveaux d'expérience des navires ennemis
-export const EXPERIENCE_LEVELS = {
-    FAIBLE: {
-        name: 'faible',
-        baseAccuracy: 1.0,     // 100% pour tests - ils cassent toujours un mur
-        maxAccuracy: 1.0,      // 100% au maximum
-        maxShots: 5            // 5 tirs pour atteindre le max
-    },
-    MEDIUM: {
-        name: 'medium', 
-        baseAccuracy: 0.10,    // 10% au premier tir
-        maxAccuracy: 1.0,      // 100% au maximum
-        maxShots: 5            // 5 tirs pour atteindre le max
-    },
-    ELEVÉ: {
-        name: 'élevé',
-        baseAccuracy: 0.20,    // 20% au premier tir
-        maxAccuracy: 1.0,      // 100% au maximum
-        maxShots: 3            // 3 tirs seulement pour atteindre le max
-    }
-};
+// Utilisation des niveaux d'expérience depuis les constantes
+export const EXPERIENCE_LEVELS = GAME_CONFIG.EXPERIENCE_LEVELS;
 
 export class EnemyShip {
     constructor(x, y, config = {}) {
@@ -70,11 +53,12 @@ export class EnemyShip {
     }
 
     getShipColor() {
+        const colors = GAME_CONFIG.COLORS;
         switch (this.type) {
-            case 'fast': return '#ff4444';
-            case 'heavy': return '#444444';
-            case 'artillery': return '#ff8800';
-            default: return '#8B4513'; // Marron pour bateau basique
+            case 'fast': return colors.SHIP_FAST;
+            case 'heavy': return colors.SHIP_HEAVY;
+            case 'artillery': return colors.SHIP_ARTILLERY;
+            default: return colors.SHIP_BASIC;
         }
     }
 
@@ -131,7 +115,7 @@ export class EnemyShip {
             // Chercher les murs autour du château de ce joueur
             const wallTarget = this.findNearestWallAroundCastle(player.castle.core, gameManager.grid);
             if (wallTarget) {
-                const distance = this.getDistance(this.x, this.y, wallTarget.x, wallTarget.y);
+                const distance = getDistance(this.x, this.y, wallTarget.x, wallTarget.y);
                 console.log(`🚢 Distance au mur cible près du château ${player.id}: ${distance.toFixed(1)} (max: ${this.searchRadius})`);
                 if (distance < closestDistance && distance <= this.searchRadius) {
                     closestDistance = distance;
@@ -174,7 +158,7 @@ export class EnemyShip {
             return;
         }
         
-        const distance = this.getDistance(this.x, this.y, this.target.x, this.target.y);
+        const distance = getDistance(this.x, this.y, this.target.x, this.target.y);
         
         if (distance <= this.range && this.hasLanded) {
             // À portée de tir et a déjà débarqué, arrêter de bouger et tirer
@@ -248,7 +232,7 @@ export class EnemyShip {
                 
                 const cell = grid.getCell(x, y);
                 if (cell && cell.type === 'wall') {
-                    const distance = this.getDistance(castleCore.x, castleCore.y, x, y);
+                    const distance = getDistance(castleCore.x, castleCore.y, x, y);
                     wallCandidates.push({ x, y, distance });
                 }
             }
@@ -366,7 +350,7 @@ export class EnemyShip {
                 if (currentCell && currentCell.type === 'water' && 
                     leftCell && leftCell.type === 'land') {
                     
-                    const distance = this.getDistance(this.x, this.y, x, y);
+                    const distance = getDistance(this.x, this.y, x, y);
                     minDistance = Math.min(minDistance, distance);
                 }
             }
@@ -506,9 +490,6 @@ export class EnemyShip {
                 }
                 return false;
             }
-            getDistance(x1, y1, x2, y2) {
-                return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-            }
         })(x, y);
     }
 
@@ -546,9 +527,6 @@ export class EnemyShip {
                 }
                 return false;
             }
-            getDistance(x1, y1, x2, y2) {
-                return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-            }
         })(x, y);
     }
 
@@ -577,7 +555,7 @@ export class EnemyShip {
             y: Math.floor(startY), 
             path: [], 
             cost: 0,
-            heuristic: this.getDistance(Math.floor(startX), Math.floor(startY), endX, endY)
+            heuristic: getDistance(Math.floor(startX), Math.floor(startY), endX, endY)
         }];
         
         const maxSteps = 500; // Augmenté pour longues distances
@@ -611,7 +589,7 @@ export class EnemyShip {
             visited.add(key);
             
             // Arrivé à destination
-            const distance = this.getDistance(current.x, current.y, endX, endY);
+            const distance = getDistance(current.x, current.y, endX, endY);
             if (distance <= 1.5) {
                 console.log(`✅ Chemin trouvé en ${steps} étapes: ${current.path.length} nœuds`);
                 return current.path;
@@ -636,7 +614,7 @@ export class EnemyShip {
                 if (visited.has(neighborKey)) continue;
                 
                 const newCost = current.cost + 1;
-                const heuristic = this.getDistance(neighbor.x, neighbor.y, endX, endY);
+                const heuristic = getDistance(neighbor.x, neighbor.y, endX, endY);
                 
                 queue.push({
                     x: neighbor.x,
@@ -673,10 +651,10 @@ export class EnemyShip {
         ];
         
         let closestBorder = borders[0];
-        let closestDistance = this.getDistance(this.x, this.y, closestBorder.x, closestBorder.y);
+        let closestDistance = getDistance(this.x, this.y, closestBorder.x, closestBorder.y);
         
         for (let border of borders) {
-            const distance = this.getDistance(this.x, this.y, border.x, border.y);
+            const distance = getDistance(this.x, this.y, border.x, border.y);
             if (distance < closestDistance) {
                 closestDistance = distance;
                 closestBorder = border;
@@ -850,11 +828,11 @@ export class EnemyShip {
             this.x, this.y,
             targetX, targetY,
             {
-                speed: 8, // Un peu plus lent pour être visible
+                speed: GAME_CONFIG.COMBAT.ENEMY_PROJECTILE_SPEED,
                 damage: this.damage,
                 type: 'cannonball',
-                color: '#ff4444', // Rouge pour les ennemis
-                maxLifetime: 10000
+                color: GAME_CONFIG.COLORS.ENEMY_PROJECTILE,
+                maxLifetime: GAME_CONFIG.COMBAT.PROJECTILE_LIFETIME
             }
         );
         
@@ -869,8 +847,9 @@ export class EnemyShip {
         // Incrémenter le compteur de tirs sur cette cible
         this.shotsFired++;
         
-        // Programmer le prochain tir avec timing aléatoire (7s ± 2s)
-        const nextFireDelay = this.fireRate + (Math.random() - 0.5) * 4000; // ± 2 secondes
+        // Programmer le prochain tir avec timing aléatoire
+        const variation = GAME_CONFIG.WAVES.LANDING_COOLDOWN * 0.4; // ± 40% de variation
+        const nextFireDelay = this.fireRate + (Math.random() - 0.5) * variation;
         const now = Date.now();
         this.lastFireTime = now;
         this.nextFireTime = now + nextFireDelay;
@@ -1008,9 +987,6 @@ export class EnemyShip {
         ctx.strokeRect(x - barWidth / 2, y, barWidth, barHeight);
     }
 
-    getDistance(x1, y1, x2, y2) {
-        return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-    }
 
     // Sérialisation pour debug/save
     serialize() {
@@ -1030,50 +1006,54 @@ export class EnemyShip {
 // Factory pour créer différents types de bateaux
 export class ShipFactory {
     static createBasicShip(x, y) {
+        const config = GAME_CONFIG.SHIPS.BASIC;
         return new EnemyShip(x, y, {
             type: 'basic',
-            health: 5, // FAIBLE - Faciles à éliminer
-            speed: 0.72, // +20% (0.6 * 1.2 = 0.72)
-            damage: 1,
-            fireRate: 7000, // 7s ± 2s
-            size: 4, // Hitbox 4x plus grande
-            experienceLevel: EXPERIENCE_LEVELS.FAIBLE // Recrues peu expérimentées
+            health: config.HEALTH,
+            speed: config.SPEED,
+            damage: config.DAMAGE,
+            fireRate: config.FIRE_RATE,
+            size: config.SIZE,
+            experienceLevel: EXPERIENCE_LEVELS[config.EXPERIENCE]
         });
     }
 
     static createFastShip(x, y) {
+        const config = GAME_CONFIG.SHIPS.FAST;
         return new EnemyShip(x, y, {
             type: 'fast',
-            health: 5, // FAIBLE - Rapides mais fragiles
-            speed: 1.44, // +20% (1.2 * 1.2 = 1.44)
-            damage: 1,
-            fireRate: 6000, // Fast ship tire plus vite
-            size: 4, // Hitbox 4x plus grande
-            experienceLevel: EXPERIENCE_LEVELS.FAIBLE // Rapides mais inexpérimentés
+            health: config.HEALTH,
+            speed: config.SPEED,
+            damage: config.DAMAGE,
+            fireRate: config.FIRE_RATE,
+            size: config.SIZE,
+            experienceLevel: EXPERIENCE_LEVELS[config.EXPERIENCE]
         });
     }
 
     static createHeavyShip(x, y) {
+        const config = GAME_CONFIG.SHIPS.HEAVY;
         return new EnemyShip(x, y, {
             type: 'heavy',
-            health: 10, // MEDIUM - Résistants
-            speed: 0.36, // +20% (0.3 * 1.2 = 0.36)
-            damage: 2,
-            fireRate: 8000, // Heavy ship tire plus lentement
-            size: 4, // Hitbox 4x plus grande
-            experienceLevel: EXPERIENCE_LEVELS.MEDIUM // Expérience moyenne
+            health: config.HEALTH,
+            speed: config.SPEED,
+            damage: config.DAMAGE,
+            fireRate: config.FIRE_RATE,
+            size: config.SIZE,
+            experienceLevel: EXPERIENCE_LEVELS[config.EXPERIENCE]
         });
     }
 
     static createArtilleryShip(x, y) {
+        const config = GAME_CONFIG.SHIPS.ARTILLERY;
         return new EnemyShip(x, y, {
             type: 'artillery',
-            health: 15, // ÉLEVÉ - Très résistants et dangereux
-            speed: 0.54, // +20% (0.45 * 1.2 = 0.54)
-            damage: 3,
-            fireRate: 7500, // Artillery ship cadence intermédiaire
-            size: 4, // Hitbox 4x plus grande
-            experienceLevel: EXPERIENCE_LEVELS.ELEVÉ // Spécialistes du tir, très expérimentés
+            health: config.HEALTH,
+            speed: config.SPEED,
+            damage: config.DAMAGE,
+            fireRate: config.FIRE_RATE,
+            size: config.SIZE,
+            experienceLevel: EXPERIENCE_LEVELS[config.EXPERIENCE]
         });
     }
 }

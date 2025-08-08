@@ -1,5 +1,7 @@
 import { Projectile } from './Projectile.js';
 import { CELL_TYPES } from './Grid.js';
+import { GAME_CONFIG } from '../config/GameConstants.js';
+import { getDistance } from '../utils/GameUtils.js';
 
 export class CombatSystem {
     constructor(gameManager) {
@@ -11,12 +13,14 @@ export class CombatSystem {
         this.projectiles = [];
         
         // Configuration du combat
+        const combatConfig = GAME_CONFIG.COMBAT;
         this.config = {
-            cannonCooldown: 2000, // Temps entre tirs (2 secondes)
-            wallDestruction: true, // Les murs peuvent être détruits
-            friendlyFire: true, // Tir ami activé
-            explosionRadius: 0.1, // Rayon minimal - détruire seulement la cellule touchée
-            maxProjectiles: 50 // Limite de projectiles simultanés
+            cannonCooldown: GAME_CONFIG.CANNON.COOLDOWN,
+            wallDestruction: combatConfig.WALL_DESTRUCTION,
+            friendlyFire: combatConfig.FRIENDLY_FIRE,
+            explosionRadius: combatConfig.EXPLOSION_RADIUS,
+            maxProjectiles: combatConfig.MAX_PROJECTILES,
+            cannonRange: GAME_CONFIG.CANNON.RANGE
         };
         
         // État des canons (cooldowns)
@@ -38,19 +42,30 @@ export class CombatSystem {
             return false;
         }
 
+        console.log(`🎯 DEBUG: Tir demandé - ${player.cannons.length} canons disponibles, fireIndex=${this.cannonFireIndex}`);
+        player.cannons.forEach((cannon, i) => {
+            console.log(`  Canon ${i}: (${cannon.x},${cannon.y}) cooldown=${this.isCannonOnCooldown(cannon)} canFire=${cannon.canFire}`);
+        });
+
         // Trouver le prochain canon qui peut tirer
         let attempts = 0;
         while (attempts < player.cannons.length) {
             const cannonIndex = this.cannonFireIndex % player.cannons.length;
             const cannon = player.cannons[cannonIndex];
             
+            console.log(`🎯 DEBUG: Tentative ${attempts+1} - Testing canon ${cannonIndex}: (${cannon.x},${cannon.y})`);
+            
             this.cannonFireIndex++;
             attempts++;
             
-            if (!this.isCannonOnCooldown(cannon)) {
+            if (!this.isCannonOnCooldown(cannon) && cannon.canFire !== false) {
                 // Ce canon peut tirer !
+                console.log(`✅ Canon ${cannonIndex} va tirer !`);
                 this.fireFromCannon(cannon, targetX, targetY);
                 return true;
+            } else {
+                const reason = this.isCannonOnCooldown(cannon) ? 'en cooldown' : 'hors zone fermée';
+                console.log(`❌ Canon ${cannonIndex} ${reason}`);
             }
         }
         
@@ -67,10 +82,10 @@ export class CombatSystem {
             cannon.x + 1, cannon.y + 1,
             targetX, targetY,
             {
-                speed: 15,
+                speed: GAME_CONFIG.COMBAT.PROJECTILE_SPEED,
                 damage: 2,
                 type: 'cannonball',
-                color: '#ff6b35'
+                color: GAME_CONFIG.COLORS.PLAYER_PROJECTILE
             }
         );
 
@@ -130,7 +145,7 @@ export class CombatSystem {
             for (let y = startY; y <= endY; y++) {
                 if (!this.grid.isValidPosition(x, y)) continue;
 
-                const distance = this.getDistance(centerX, centerY, x, y);
+                const distance = getDistance(centerX, centerY, x, y);
                 if (distance > explosionRadius) continue;
 
                 // Calculer les dégâts selon la distance (plus faible en périphérie)
@@ -162,7 +177,7 @@ export class CombatSystem {
             
             // Vérifier si le bateau est dans cette zone (avec sa taille)
             const shipRadius = ship.size / 2; // Rayon basé sur la taille
-            const distance = this.getDistance(ship.x, ship.y, x, y);
+            const distance = getDistance(ship.x, ship.y, x, y);
             
             if (distance <= shipRadius) {
                 console.log(`🎯 Bateau touché ! Distance: ${distance.toFixed(1)}, Radius: ${shipRadius}`);
@@ -298,9 +313,32 @@ export class CombatSystem {
      * Événement : mur détruit
      */
     onWallDestroyed(x, y) {
-        // Vérifier si cela brise la fermeture du château
-        // (sera implémenté plus tard avec la détection de château)
         console.log(`🧱 Mur détruit à (${x}, ${y})`);
+        
+        // IMPORTANT: Quand un mur est détruit, il faut reverifier les zones fermées
+        // et désactiver les canons qui ne sont plus dans une zone fermée
+        this.scheduleCannonValidation();
+    }
+    
+    /**
+     * Programme une validation des canons à la fin du combat
+     */
+    scheduleCannonValidation() {
+        this.needsCannonValidation = true;
+    }
+    
+    /**
+     * Méthode appelée à la fin du combat pour valider les canons
+     */
+    validateCannonsAfterCombat() {
+        if (this.needsCannonValidation) {
+            // Recalculer les zones fermées
+            this.gameManager.checkCastleClosure();
+            // Valider quels canons peuvent encore tirer
+            this.gameManager.validatePlayerCannons();
+            this.needsCannonValidation = false;
+            console.log('🔍 Validation des canons après combat terminée');
+        }
     }
 
     /**
@@ -379,23 +417,6 @@ export class CombatSystem {
         }
     }
 
-    /**
-     * Rendre tous les éléments du combat
-     */
-    render(ctx, renderer) {
-        // Rendre les projectiles
-        this.projectiles.forEach(projectile => {
-            projectile.render(ctx, renderer);
-        });
-        
-        // Rendre l'interface de visée
-        if (this.aimingMode && this.selectedCannon) {
-            this.renderAimingInterface(ctx, renderer);
-        }
-        
-        // Rendre les indicateurs de canons (pour aider le joueur)
-        this.renderCannonIndicators(ctx, renderer);
-    }
 
     /**
      * Rendre des indicateurs sur les canons cliquables
@@ -461,7 +482,7 @@ export class CombatSystem {
         const crosshairScreenPos = renderer.gridToScreen(this.crosshairPos.x, this.crosshairPos.y);
         
         // Ligne de visée
-        const distance = this.getDistance(cannon.x + 1, cannon.y + 1, this.crosshairPos.x, this.crosshairPos.y);
+        const distance = getDistance(cannon.x + 1, cannon.y + 1, this.crosshairPos.x, this.crosshairPos.y);
         const inRange = distance <= this.config.cannonRange;
         
         ctx.strokeStyle = inRange ? '#00ff00' : '#ff0000';
@@ -495,11 +516,7 @@ export class CombatSystem {
                     crosshairScreenPos.x + 15, crosshairScreenPos.y - 15);
     }
 
-    // Méthodes utilitaires
-    
-    getDistance(x1, y1, x2, y2) {
-        return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-    }
+    // Méthodes utilitaires maintenant dans GameUtils
 
     findCannonAt(x, y, playerId) {
         const players = this.gameManager.players;

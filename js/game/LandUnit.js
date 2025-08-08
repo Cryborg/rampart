@@ -1,4 +1,6 @@
 import { CELL_TYPES } from './Grid.js';
+import { GAME_CONFIG } from '../config/GameConstants.js';
+import { getDistance } from '../utils/GameUtils.js';
 
 /**
  * Classe de base pour les unités terrestres (infanterie, tanks)
@@ -38,10 +40,11 @@ export class LandUnit {
     }
 
     getUnitColor() {
+        const colors = GAME_CONFIG.COLORS;
         switch (this.type) {
-            case 'tank': return '#2d4a22'; // Vert foncé
+            case 'tank': return colors.TANK;
             case 'infantry': 
-            default: return '#8B4513'; // Marron pour infanterie
+            default: return colors.INFANTRY;
         }
     }
 
@@ -87,7 +90,7 @@ export class LandUnit {
         for (let player of gameManager.players) {
             if (player.isDefeated || !player.castle.core) continue;
             
-            const distance = this.getDistance(this.x, this.y, player.castle.core.x, player.castle.core.y);
+            const distance = getDistance(this.x, this.y, player.castle.core.x, player.castle.core.y);
             if (distance < closestDistance && distance <= this.searchRadius) {
                 closestDistance = distance;
                 closestCastle = player.castle.core;
@@ -113,7 +116,7 @@ export class LandUnit {
             return;
         }
         
-        const distance = this.getDistance(this.x, this.y, this.target.x, this.target.y);
+        const distance = getDistance(this.x, this.y, this.target.x, this.target.y);
         
         if (distance <= 2) {
             // Proche du château, bloquer la reconstruction
@@ -187,7 +190,7 @@ export class LandUnit {
             visited.add(key);
             
             // Arrivé à destination
-            const distance = this.getDistance(current.x, current.y, endX, endY);
+            const distance = getDistance(current.x, current.y, endX, endY);
             if (distance <= 1.5) {
                 return current.path;
             }
@@ -380,9 +383,6 @@ export class LandUnit {
         ctx.strokeRect(x - barWidth / 2, y, barWidth, barHeight);
     }
 
-    getDistance(x1, y1, x2, y2) {
-        return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-    }
 
     // Vérification si l'unité bloque un placement de pièce
     blocksPlacement(pieceX, pieceY, pieceWidth, pieceHeight) {
@@ -413,22 +413,24 @@ export class LandUnit {
 // Factory pour créer différents types d'unités terrestres
 export class LandUnitFactory {
     static createInfantry(x, y) {
+        const config = GAME_CONFIG.LAND_UNITS.INFANTRY;
         return new LandUnit(x, y, {
             type: 'infantry',
-            health: 2,
-            speed: 1.2,
-            size: 0.5,
-            damage: 1
+            health: config.HEALTH,
+            speed: config.SPEED,
+            size: config.SIZE,
+            damage: config.DAMAGE
         });
     }
 
     static createTank(x, y) {
+        const config = GAME_CONFIG.LAND_UNITS.TANK;
         return new LandUnit(x, y, {
             type: 'tank',
-            health: 5,
-            speed: 0.8,
-            size: 0.8,
-            damage: 2
+            health: config.HEALTH,
+            speed: config.SPEED,
+            size: config.SIZE,
+            damage: config.DAMAGE
         });
     }
 }
