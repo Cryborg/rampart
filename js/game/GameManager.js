@@ -629,7 +629,7 @@ export class GameManager {
         // Formule Rampart : floor(40% * (cases_dorées_libres / 4))
         const maxCannons = Math.floor(GAME_CONFIG.GAMEPLAY.CANNON_RATIO * (freeGoldenCells / 4));
         
-        console.log(`Cases dorees libres (Joueur ${targetPlayerId}): ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
+        // console.log(`Cases dorees libres (Joueur ${targetPlayerId}): ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
         return Math.max(GAME_CONFIG.GAMEPLAY.MIN_CANNONS, maxCannons);
     }
 

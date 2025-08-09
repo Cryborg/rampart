@@ -41,7 +41,9 @@ export class Player {
         this.turnFinished = false;
         
         // Configuration des contrôles selon le type
+        console.log(`DEBUG Joueur ${id}: controlType="${controlType}"`);
         this.controlScheme = this.getControlScheme(controlType);
+        console.log(`DEBUG Joueur ${id}: controlScheme=`, this.controlScheme);
     }
 
     /**
