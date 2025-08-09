@@ -33,6 +33,88 @@ export class Player {
             piecesPlaced: 0,
             roundsSurvived: 0
         };
+
+        // État multijoueur
+        this.turnFinished = false;
+        
+        // Configuration des contrôles selon le type
+        this.controlScheme = this.getControlScheme(controlType);
+    }
+
+    /**
+     * Obtenir le schéma de contrôles selon le type
+     */
+    getControlScheme(controlType) {
+        const schemes = {
+            mouse: {
+                // La souris est gérée différemment
+                type: 'mouse',
+                keys: {}
+            },
+            keyboard_arrows: {
+                type: 'keyboard',
+                keys: {
+                    up: 'ArrowUp',
+                    down: 'ArrowDown', 
+                    left: 'ArrowLeft',
+                    right: 'ArrowRight',
+                    action: 'Space',        // Placer/Tirer
+                    rotate: 'Enter',        // Rotation pièce
+                    cancel: 'Escape'        // Annuler
+                }
+            },
+            keyboard_wasd: {
+                type: 'keyboard',
+                keys: {
+                    up: 'KeyW',
+                    down: 'KeyS',
+                    left: 'KeyA', 
+                    right: 'KeyD',
+                    action: 'KeyQ',         // Placer/Tirer
+                    rotate: 'KeyE',         // Rotation pièce
+                    cancel: 'KeyR'          // Annuler
+                }
+            },
+            keyboard_numpad: {
+                type: 'keyboard', 
+                keys: {
+                    up: 'Numpad8',
+                    down: 'Numpad2',
+                    left: 'Numpad4',
+                    right: 'Numpad6', 
+                    action: 'Numpad0',      // Placer/Tirer
+                    rotate: 'NumpadEnter',  // Rotation pièce
+                    cancel: 'NumpadDecimal' // Annuler
+                }
+            }
+        };
+
+        return schemes[controlType] || schemes.mouse;
+    }
+
+    /**
+     * Vérifier si une touche appartient à ce joueur
+     */
+    ownsKey(keyCode) {
+        if (this.controlScheme.type === 'mouse') {
+            return false; // La souris est gérée globalement
+        }
+        
+        return Object.values(this.controlScheme.keys).includes(keyCode);
+    }
+
+    /**
+     * Obtenir l'action correspondant à une touche
+     */
+    getActionForKey(keyCode) {
+        if (this.controlScheme.type === 'mouse') return null;
+        
+        for (let [action, key] of Object.entries(this.controlScheme.keys)) {
+            if (key === keyCode) {
+                return action;
+            }
+        }
+        return null;
     }
 
     update(deltaTime) {

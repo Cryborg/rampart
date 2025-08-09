@@ -25,10 +25,18 @@ export class GameState {
         this.phaseTimeLeft = 0;
         this.isTransitioning = false;
         
+        // Support multijoueur
+        this.isMultiplayer = false;
+        this.playerCount = 1;
+        this.currentPlayerTurn = 0;
+        this.playersFinishedTurn = new Set();
+        this.isSequentialPhase = false;
+        
         this.callbacks = {
             onStateChange: [],
             onPhaseTimeout: [],
-            onRoundComplete: []
+            onRoundComplete: [],
+            onPlayerTurnChange: []
         };
     }
 
@@ -41,6 +49,17 @@ export class GameState {
         this.previousState = this.currentState;
         this.currentState = newState;
         
+        // Déterminer si la nouvelle phase est séquentielle
+        this.isSequentialPhase = this.isMultiplayer && 
+            (newState === GAME_STATES.PLACE_CANNONS || newState === GAME_STATES.REPAIR);
+        
+        // Réinitialiser les tours multijoueurs
+        if (this.isSequentialPhase) {
+            this.currentPlayerTurn = 0;
+            this.playersFinishedTurn.clear();
+            console.log(`👥 Phase séquentielle ${newState} commencée - Tour du joueur 1`);
+        }
+        
         this.phaseStartTime = Date.now();
         this.phaseTimeLeft = PHASE_DURATIONS[newState] || 0;
         
@@ -52,6 +71,122 @@ export class GameState {
             this.isTransitioning = false;
         }, 100);
 
+        return true;
+    }
+
+    /**
+     * Configurer le mode multijoueur
+     */
+    setMultiplayerMode(playerCount) {
+        this.isMultiplayer = playerCount > 1;
+        this.playerCount = playerCount;
+        this.currentPlayerTurn = 0;
+        this.playersFinishedTurn.clear();
+        
+        console.log(`👥 Mode multijoueur activé: ${playerCount} joueurs`);
+    }
+
+    /**
+     * Passer au joueur suivant en phase séquentielle
+     */
+    nextPlayerTurn() {
+        if (!this.isSequentialPhase) return false;
+        
+        const previousPlayer = this.currentPlayerTurn;
+        this.currentPlayerTurn = (this.currentPlayerTurn + 1) % this.playerCount;
+        
+        console.log(`🔄 Tour séquentiel: Joueur ${previousPlayer + 1} → Joueur ${this.currentPlayerTurn + 1}`);
+        
+        // Notifier le changement de tour
+        this.notifyPlayerTurnChange(this.currentPlayerTurn, previousPlayer);
+        
+        return true;
+    }
+
+    /**
+     * Marquer le joueur actuel comme ayant fini son tour
+     */
+    finishCurrentPlayerTurn(playerId = null) {
+        const playerToFinish = playerId !== null ? playerId : this.currentPlayerTurn;
+        this.playersFinishedTurn.add(playerToFinish);
+        
+        console.log(`✅ Joueur ${playerToFinish + 1} a terminé son tour`);
+        
+        // Vérifier si tous les joueurs ont fini
+        if (this.allPlayersFinished()) {
+            console.log(`🏁 Tous les joueurs ont terminé la phase ${this.currentState}`);
+            return this.handleAllPlayersFinished();
+        } else if (this.isSequentialPhase) {
+            // Passer au joueur suivant qui n'a pas encore fini
+            this.nextAvailablePlayer();
+        }
+        
+        return false;
+    }
+
+    /**
+     * Passer au prochain joueur qui n'a pas encore fini son tour
+     */
+    nextAvailablePlayer() {
+        let attempts = 0;
+        const maxAttempts = this.playerCount;
+        
+        do {
+            this.nextPlayerTurn();
+            attempts++;
+        } while (this.playersFinishedTurn.has(this.currentPlayerTurn) && attempts < maxAttempts);
+        
+        if (attempts >= maxAttempts) {
+            // Tous les joueurs ont fini
+            return this.handleAllPlayersFinished();
+        }
+        
+        return true;
+    }
+
+    /**
+     * Vérifier si tous les joueurs ont terminé leur tour
+     */
+    allPlayersFinished() {
+        return this.playersFinishedTurn.size >= this.playerCount;
+    }
+
+    /**
+     * Gérer la fin de phase quand tous les joueurs ont terminé
+     */
+    handleAllPlayersFinished() {
+        console.log(`🎯 Phase ${this.currentState} terminée - tous les joueurs ont fini`);
+        
+        // Transition automatique vers la phase suivante
+        switch (this.currentState) {
+            case GAME_STATES.PLACE_CANNONS:
+                return this.transition(GAME_STATES.COMBAT);
+            case GAME_STATES.REPAIR:
+                // Après réparation, on recommence le cycle
+                return this.transition(GAME_STATES.PLACE_CANNONS);
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Obtenir le joueur actuel en phase séquentielle
+     */
+    getCurrentPlayer() {
+        return this.isSequentialPhase ? this.currentPlayerTurn : 0;
+    }
+
+    /**
+     * Vérifier si un joueur peut agir (selon la phase et le mode)
+     */
+    canPlayerAct(playerId) {
+        if (!this.isMultiplayer) return true;
+        
+        if (this.isSequentialPhase) {
+            return playerId === this.currentPlayerTurn && !this.playersFinishedTurn.has(playerId);
+        }
+        
+        // En phases simultanées (combat), tous les joueurs peuvent agir
         return true;
     }
 
@@ -171,6 +306,16 @@ export class GameState {
         this.callbacks.onRoundComplete.forEach(callback => {
             callback(this.round);
         });
+    }
+
+    notifyPlayerTurnChange(currentPlayer, previousPlayer) {
+        this.callbacks.onPlayerTurnChange.forEach(callback => {
+            callback(currentPlayer, previousPlayer);
+        });
+    }
+
+    onPlayerTurnChange(callback) {
+        this.callbacks.onPlayerTurnChange.push(callback);
     }
 
     // Serialization for save/load

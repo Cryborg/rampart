@@ -575,4 +575,195 @@ export class Renderer {
         const colors = ['#ff6b35', '#004e89', '#2ecc71'];
         return colors[playerId - 1] || '#ffffff';
     }
+
+    /**
+     * Rendre les stats de tous les joueurs en mode multijoueur
+     */
+    renderMultiPlayerStats(players, currentPlayer, gameState) {
+        if (!players || players.length <= 1) return; // Pas de rendu en solo
+
+        const panelWidth = 250;
+        const panelHeight = 120;
+        const margin = 10;
+        const startY = 10;
+
+        for (let i = 0; i < players.length; i++) {
+            const player = players[i];
+            const panelX = this.canvas.width - panelWidth - margin;
+            const panelY = startY + i * (panelHeight + margin);
+
+            this.renderPlayerStatsPanel(player, panelX, panelY, panelWidth, panelHeight, 
+                                        currentPlayer === i, gameState);
+        }
+    }
+
+    /**
+     * Rendre le panneau de stats d'un joueur individuel
+     */
+    renderPlayerStatsPanel(player, x, y, width, height, isCurrent, gameState) {
+        this.ctx.save();
+
+        // Fond du panneau avec couleur du joueur
+        const alpha = isCurrent ? 0.9 : 0.7;
+        this.ctx.fillStyle = this.hexToRgba(player.color, alpha);
+        this.ctx.fillRect(x, y, width, height);
+
+        // Bordure - plus épaisse pour le joueur actuel
+        this.ctx.strokeStyle = isCurrent ? '#ffffff' : player.color;
+        this.ctx.lineWidth = isCurrent ? 3 : 1;
+        this.ctx.strokeRect(x, y, width, height);
+
+        // Texte de base
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = isCurrent ? 'bold 16px Arial' : '14px Arial';
+        this.ctx.textAlign = 'left';
+        this.ctx.textBaseline = 'top';
+
+        const textX = x + 10;
+        let textY = y + 10;
+        const lineHeight = 16;
+
+        // Nom du joueur avec indicateur de tour
+        const playerName = isCurrent ? `▶ ${player.name}` : player.name;
+        this.ctx.fillText(playerName, textX, textY);
+        textY += lineHeight + 2;
+
+        // Schéma de contrôle
+        const controlText = this.getControlText(player.controlType);
+        this.ctx.font = '11px Arial';
+        this.ctx.fillStyle = isCurrent ? '#ffff00' : '#cccccc';
+        this.ctx.fillText(controlText, textX, textY);
+        textY += lineHeight;
+
+        // Stats du joueur
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = '12px Arial';
+        
+        this.ctx.fillText(`Score: ${player.score}`, textX, textY);
+        textY += lineHeight;
+
+        this.ctx.fillText(`Vies: ${player.lives} ❤`, textX, textY);
+        textY += lineHeight;
+
+        this.ctx.fillText(`Canons: ${player.cannons.length}`, textX, textY);
+
+        // État spécifique à la phase
+        this.renderPlayerPhaseInfo(player, textX + 130, y + 10, gameState, isCurrent);
+
+        this.ctx.restore();
+    }
+
+    /**
+     * Rendre les informations spécifiques à la phase
+     */
+    renderPlayerPhaseInfo(player, x, y, gameState, isCurrent) {
+        this.ctx.font = '11px Arial';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillStyle = '#ffffff';
+
+        let infoText = '';
+        switch (gameState?.currentState) {
+            case 'PLACE_CANNONS':
+                // Afficher le nombre de canons restants à placer
+                if (player.remainingCannons !== undefined) {
+                    infoText = `Reste: ${player.remainingCannons}`;
+                }
+                break;
+            case 'REPAIR':
+                // Afficher le type de pièce actuelle
+                if (player.currentPiece && isCurrent) {
+                    infoText = `Pièce: ${player.currentPiece.type}`;
+                }
+                break;
+            case 'COMBAT':
+                // Afficher le statut de combat
+                infoText = 'En combat';
+                break;
+        }
+
+        if (infoText) {
+            this.ctx.fillText(infoText, x, y);
+        }
+
+        // État du château
+        let castleStatus = '';
+        if (player.castle.destroyed) {
+            castleStatus = '💀 Détruit';
+            this.ctx.fillStyle = '#ff4444';
+        } else if (player.castle.isClosed) {
+            castleStatus = '🏰 Fermé';
+            this.ctx.fillStyle = '#00ff00';
+        } else {
+            castleStatus = '🔓 Ouvert';
+            this.ctx.fillStyle = '#ffaa00';
+        }
+        
+        this.ctx.fillText(castleStatus, x, y + 15);
+
+        // Indicateur de tour fini (en phases séquentielles)
+        if ((gameState?.currentState === 'PLACE_CANNONS' || gameState?.currentState === 'REPAIR') 
+            && player.turnFinished) {
+            this.ctx.fillStyle = '#00ff00';
+            this.ctx.fillText('✓ Fini', x, y + 30);
+        }
+    }
+
+    /**
+     * Obtenir le texte descriptif du type de contrôle
+     */
+    getControlText(controlType) {
+        const controlTexts = {
+            'mouse': '🖱️ Souris',
+            'keyboard_arrows': '⌨️ Flèches',
+            'keyboard_wasd': '⌨️ WASD',
+            'keyboard_numpad': '⌨️ Pavé num.'
+        };
+        return controlTexts[controlType] || controlType;
+    }
+
+    /**
+     * Rendre l'indicateur de tour actuel (grand et visible)
+     */
+    renderCurrentPlayerIndicator(currentPlayer, players) {
+        if (!players || players.length <= 1) return;
+
+        const player = players[currentPlayer];
+        if (!player) return;
+
+        // Grand bandeau en haut au centre
+        const bannerWidth = 300;
+        const bannerHeight = 40;
+        const bannerX = (this.canvas.width - bannerWidth) / 2;
+        const bannerY = 10;
+
+        // Fond avec couleur du joueur
+        this.ctx.fillStyle = this.hexToRgba(player.color, 0.9);
+        this.ctx.fillRect(bannerX, bannerY, bannerWidth, bannerHeight);
+
+        // Bordure
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(bannerX, bannerY, bannerWidth, bannerHeight);
+
+        // Texte du tour
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 20px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(
+            `Tour de ${player.name}`,
+            bannerX + bannerWidth / 2,
+            bannerY + bannerHeight / 2
+        );
+    }
+
+    /**
+     * Convertir hex en rgba
+     */
+    hexToRgba(hex, alpha) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
 }

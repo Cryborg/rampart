@@ -70,6 +70,81 @@ export class GameManager {
         this.currentPlayer = 0;
     }
 
+    /**
+     * Initialiser plusieurs joueurs pour multijoueur local
+     */
+    initializeMultiPlayers(playerCount = 2, gameMode = '2players') {
+        this.players = []; // Reset des joueurs
+        this.gameMode = gameMode;
+        
+        const configs = [
+            { name: 'Joueur 1', color: '#ff6b35', controlType: 'mouse' },
+            { name: 'Joueur 2', color: '#004e89', controlType: 'keyboard_arrows' },
+            { name: 'Joueur 3', color: '#2ecc71', controlType: 'keyboard_wasd' }
+        ];
+
+        for (let i = 0; i < Math.min(playerCount, 3); i++) {
+            const config = configs[i];
+            const player = new Player(i + 1, config.name, config.color, config.controlType);
+            
+            // Les territoires seront assignés dans setupLevel selon le mode
+            this.players.push(player);
+        }
+        
+        this.currentPlayer = 0;
+        
+        // Configurer GameState en mode multijoueur
+        this.gameState.setMultiplayerMode(playerCount);
+        
+        console.log(`👥 ${playerCount} joueurs initialisés en mode ${gameMode}`);
+    }
+
+    /**
+     * Passer au joueur suivant (rotation des tours)
+     */
+    nextPlayer() {
+        const previousPlayer = this.currentPlayer;
+        this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
+        
+        console.log(`🔄 Tour: Joueur ${previousPlayer + 1} → Joueur ${this.currentPlayer + 1}`);
+        
+        // Émettre un événement pour l'UI
+        this.onPlayerChanged?.(this.currentPlayer, previousPlayer);
+        
+        return this.currentPlayer;
+    }
+
+    /**
+     * Obtenir le joueur actuel
+     */
+    getCurrentPlayer() {
+        return this.players[this.currentPlayer];
+    }
+
+    /**
+     * Obtenir un joueur par ID
+     */
+    getPlayerById(id) {
+        return this.players.find(p => p.id === id);
+    }
+
+    /**
+     * Vérifier si tous les joueurs ont terminé leur tour (pour phases séquentielles)
+     */
+    allPlayersFinishedTurn() {
+        // Cette méthode sera utilisée pour les phases séquentielles
+        return this.players.every(player => player.turnFinished === true);
+    }
+
+    /**
+     * Réinitialiser les tours de tous les joueurs
+     */
+    resetAllPlayerTurns() {
+        this.players.forEach(player => {
+            player.turnFinished = false;
+        });
+    }
+
     initializeCombatSystems() {
         // Initialiser le système de combat
         this.combatSystem = new CombatSystem(this);
@@ -90,10 +165,12 @@ export class GameManager {
 
     setupInputHandlers() {
         this.inputHandler.onMouseMove = (x, y) => {
+            // La souris est gérée par le joueur actuel (ou joueur souris en multijoueur)
             this.handleMouseMove(x, y);
         };
 
         this.inputHandler.onMouseClick = (x, y, button) => {
+            // La souris est gérée par le joueur actuel (ou joueur souris en multijoueur)
             this.handleMouseClick(x, y, button);
         };
 
@@ -102,8 +179,197 @@ export class GameManager {
         };
         
         this.inputHandler.onKeyDown = (key) => {
-            this.handleKeyDown(key);
+            // Distribuer les inputs clavier aux bons joueurs
+            this.distributeKeyboardInput(key);
         };
+    }
+
+    /**
+     * Distribuer les inputs clavier aux joueurs appropriés
+     */
+    distributeKeyboardInput(keyCode) {
+        // D'abord gérer les touches globales
+        if (this.handleGlobalKeys(keyCode)) {
+            return; // Touche globale gérée
+        }
+
+        // Trouver le joueur qui possède cette touche
+        const targetPlayer = this.players.find(player => player.ownsKey(keyCode));
+        
+        if (targetPlayer) {
+            const action = targetPlayer.getActionForKey(keyCode);
+            
+            // En mode multijoueur, vérifier si c'est le tour de ce joueur pour certaines actions
+            if (this.players.length > 1) {
+                if (this.isPlayerActionAllowed(targetPlayer, action)) {
+                    this.handlePlayerKeyboardAction(targetPlayer, action, keyCode);
+                }
+            } else {
+                // Mode solo : laisser passer toutes les actions
+                this.handlePlayerKeyboardAction(targetPlayer, action, keyCode);
+            }
+        } else {
+            // Fallback : si aucun joueur ne possède cette touche, l'envoyer au joueur actuel
+            this.handleKeyDown(keyCode);
+        }
+    }
+
+    /**
+     * Gérer les touches globales (pause, debug, etc.)
+     */
+    handleGlobalKeys(keyCode) {
+        switch (keyCode) {
+            case 'Escape':
+                // Pause globale (sauf si un joueur l'utilise pour annuler)
+                if (!this.players.some(p => p.ownsKey(keyCode))) {
+                    this.togglePause();
+                    return true;
+                }
+                break;
+            case 'F1':
+                // Debug toggle
+                this.toggleDebugMode();
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Vérifier si un joueur peut effectuer une action selon le mode de jeu
+     */
+    isPlayerActionAllowed(player, action) {
+        // En mode multijoueur simultané (combat) : toutes les actions autorisées
+        if (this.gameState.currentState === 'COMBAT') {
+            return true;
+        }
+        
+        // En phases séquentielles : seul le joueur actuel peut agir
+        if (this.gameState.currentState === 'PLACE_CANNONS' || this.gameState.currentState === 'REPAIR') {
+            return player.id === this.getCurrentPlayer().id;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Gérer l'action clavier d'un joueur spécifique
+     */
+    handlePlayerKeyboardAction(player, action, keyCode) {
+        console.log(`⌨️ Joueur ${player.id} - Action: ${action} (${keyCode})`);
+        
+        switch (action) {
+            case 'up':
+            case 'down':
+            case 'left':
+            case 'right':
+                this.handlePlayerMovement(player, action);
+                break;
+            case 'action':
+                this.handlePlayerAction(player);
+                break;
+            case 'rotate':
+                this.handlePlayerRotate(player);
+                break;
+            case 'cancel':
+                this.handlePlayerCancel(player);
+                break;
+        }
+    }
+
+    /**
+     * Gérer le mouvement d'un joueur (pour les pièces en mode REPAIR)
+     */
+    handlePlayerMovement(player, direction) {
+        if (this.gameState.currentState !== 'REPAIR' || !player.currentPiece) return;
+        
+        const moveAmount = 1;
+        switch (direction) {
+            case 'up':
+                player.piecePosition.y = Math.max(0, player.piecePosition.y - moveAmount);
+                break;
+            case 'down':
+                player.piecePosition.y = Math.min(this.grid.height - 1, player.piecePosition.y + moveAmount);
+                break;
+            case 'left':
+                player.piecePosition.x = Math.max(0, player.piecePosition.x - moveAmount);
+                break;
+            case 'right':
+                player.piecePosition.x = Math.min(this.grid.width - 1, player.piecePosition.x + moveAmount);
+                break;
+        }
+    }
+
+    /**
+     * Gérer l'action principale d'un joueur
+     */
+    handlePlayerAction(player) {
+        if (this.gameState.currentState === 'PLACE_CANNONS') {
+            // Placer un canon à la position actuelle
+            // TODO: Implémenter placement canon au clavier
+        } else if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
+            // Placer la pièce actuelle
+            const pieceX = player.piecePosition.x;
+            const pieceY = player.piecePosition.y;
+            
+            if (this.grid.canPlacePiece(player.currentPiece, pieceX, pieceY, this)) {
+                this.grid.placePiece(player.currentPiece, pieceX, pieceY, player.id);
+                player.stats.piecesPlaced++;
+                
+                // Vérifier fermeture château et revalider canons
+                this.checkCastleClosure();
+                this.validatePlayerCannons();
+                
+                // Prendre une nouvelle pièce
+                player.currentPiece = this.pieceGenerator.getRandomPiece();
+                console.log(`🧩 ${player.name} place une pièce et en prend une nouvelle`);
+            }
+        }
+    }
+
+    /**
+     * Gérer la rotation pour un joueur
+     */
+    handlePlayerRotate(player) {
+        if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
+            player.currentPiece.rotate();
+            console.log(`🔄 ${player.name} fait tourner sa pièce`);
+        }
+    }
+
+    /**
+     * Gérer l'annulation pour un joueur
+     */
+    handlePlayerCancel(player) {
+        // En phases séquentielles, permettre de terminer le tour
+        if (this.gameState.isSequentialPhase && player.id === this.getCurrentPlayer().id + 1) {
+            this.finishPlayerTurn(player);
+        } else {
+            console.log(`❌ ${player.name} annule`);
+        }
+    }
+
+    /**
+     * Terminer le tour d'un joueur
+     */
+    finishPlayerTurn(player) {
+        if (!this.gameState.isSequentialPhase) return;
+        
+        const playerId = player.id - 1; // Convertir en index (base 0)
+        console.log(`✅ ${player.name} termine son tour`);
+        
+        // Marquer le joueur comme ayant terminé dans Player
+        player.turnFinished = true;
+        
+        // Notifier GameState
+        this.gameState.finishCurrentPlayerTurn(playerId);
+    }
+
+    /**
+     * Vérifier si le joueur actuel peut effectuer une action
+     */
+    canCurrentPlayerAct() {
+        const currentPlayer = this.getCurrentPlayer();
+        return this.gameState.canPlayerAct(currentPlayer.id - 1);
     }
 
     handleMouseMove(canvasX, canvasY) {
@@ -208,6 +474,12 @@ export class GameManager {
     }
 
     handleCannonPlacement(gridPos, button) {
+        // Vérifier si le joueur peut agir
+        if (!this.canCurrentPlayerAct()) {
+            console.log(`❌ Ce n'est pas le tour du joueur ${this.currentPlayer + 1}`);
+            return;
+        }
+        
         if (button === 0) { // Left click - placer un canon
             if (this.canPlaceCannonAt(gridPos.x, gridPos.y)) {
                 if (this.grid.placeCannon(gridPos.x, gridPos.y, this.players[this.currentPlayer].id)) {
@@ -227,13 +499,22 @@ export class GameManager {
                     this.cannonsPlacedThisPhase++;
                     console.log(`🎯 Canon ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase} placé dans cette phase`);
                     
-                    // Vérifier si plus de canons à placer → transition automatique
+                    // Vérifier si plus de canons à placer pour ce joueur
                     const cannonsToPlace = this.calculateCannonsToPlace();
                     if (cannonsToPlace <= 0) {
-                        console.log(`🎯 Plus de canons à placer ! Transition vers combat.`);
-                        setTimeout(() => {
-                            this.gameState.transition('COMBAT');
-                        }, 1000); // Petit délai pour voir le placement
+                        console.log(`🎯 Joueur ${this.currentPlayer + 1} a terminé de placer ses canons`);
+                        
+                        // En multijoueur, terminer automatiquement le tour
+                        if (this.gameState.isMultiplayer) {
+                            setTimeout(() => {
+                                this.finishPlayerTurn(this.getCurrentPlayer());
+                            }, 500);
+                        } else {
+                            // En solo, transition directe au combat
+                            setTimeout(() => {
+                                this.gameState.transition('COMBAT');
+                            }, 1000);
+                        }
                     }
                 } else {
                     console.log(`❌ Impossible de placer un canon à (${gridPos.x}, ${gridPos.y})`);
@@ -360,6 +641,12 @@ export class GameManager {
     }
 
     handlePiecePlacement(gridPos, button) {
+        // Vérifier si le joueur peut agir
+        if (!this.canCurrentPlayerAct()) {
+            console.log(`❌ Ce n'est pas le tour du joueur ${this.currentPlayer + 1} (REPAIR)`);
+            return;
+        }
+        
         const player = this.players[this.currentPlayer];
         
         if (button === 0) { // Left click - place piece
@@ -752,6 +1039,17 @@ export class GameManager {
                 this.renderer.setCursorVisibility(false);
             }
         });
+
+        // Setup callback for player turn changes (multiplayer)
+        this.gameState.onPlayerTurnChange((currentPlayer, previousPlayer) => {
+            console.log(`👥 Tour: Joueur ${previousPlayer + 1} → Joueur ${currentPlayer + 1}`);
+            
+            // Synchroniser avec le currentPlayer du GameManager
+            this.currentPlayer = currentPlayer;
+            
+            // Callback optional pour l'UI
+            this.onPlayerChanged?.(currentPlayer, previousPlayer);
+        });
         
         // Château déjà créé dans setupDefaultLevel()
         
@@ -882,6 +1180,12 @@ export class GameManager {
         }
         
         this.renderer.renderPlayers(this.players);
+        
+        // Rendre l'interface multijoueur si plusieurs joueurs
+        if (this.players.length > 1) {
+            this.renderer.renderMultiPlayerStats(this.players, this.currentPlayer, this.gameState);
+            this.renderer.renderCurrentPlayerIndicator(this.currentPlayer, this.players);
+        }
         
         // Rendre les systèmes de combat
         if (this.combatSystem && this.gameState.currentState === 'COMBAT') {
@@ -1054,5 +1358,23 @@ export class GameManager {
             }
         }
         return null;
+    }
+
+    /**
+     * Méthode de test pour initialiser rapidement un mode 2 joueurs
+     */
+    initTest2Players() {
+        console.log('🎮 Initialisation test 2 joueurs');
+        
+        // Initialiser les joueurs multiples
+        this.initializeMultiPlayers(2, '2players');
+        
+        // Configurer le terrain 2 joueurs
+        this.setupDefaultLevel('2players');
+        
+        // Démarrer directement en phase canons
+        this.gameState.transition('PLACE_CANNONS');
+        
+        console.log('✅ Test 2 joueurs prêt !');
     }
 }
