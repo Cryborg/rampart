@@ -4,9 +4,10 @@ import { adjustBrightness, rgbToHex, hexToRgb } from '../utils/GameUtils.js';
 import { CoordinateService } from '../services/CoordinateService.js';
 
 export class Renderer {
-    constructor(canvas, ctx) {
+    constructor(canvas, ctx, gameManager = null) {
         this.canvas = canvas;
         this.ctx = ctx;
+        this.gameManager = gameManager;
         this.cellSize = 32;
         this.gridOffsetX = 0;
         this.gridOffsetY = 0;

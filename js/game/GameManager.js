@@ -45,7 +45,7 @@ export class GameManager {
             throw new Error('Canvas not found or context not supported');
         }
 
-        this.renderer = new Renderer(this.canvas, this.ctx);
+        this.renderer = new Renderer(this.canvas, this.ctx, this);
         this.inputHandler = new InputHandler(this.canvas);
         
         await this.renderer.init();
