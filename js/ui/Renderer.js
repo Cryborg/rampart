@@ -357,8 +357,12 @@ export class Renderer {
         }
         
         // Render cursor for keyboard players during cannon placement
-        if (player.controlType !== 'mouse' && player.cursorPosition && 
-            this.gameManager && this.gameManager.gameState.currentState === 'PLACE_CANNONS') {
+        const shouldRenderCursor = player.controlType !== 'mouse' && player.cursorPosition && 
+            this.gameManager && this.gameManager.gameState.currentState === 'PLACE_CANNONS';
+        
+        console.log(`DEBUG cursor Joueur ${player.id}: controlType=${player.controlType}, cursorPos=${!!player.cursorPosition}, gameManager=${!!this.gameManager}, state=${this.gameManager?.gameState?.currentState}, shouldRender=${shouldRenderCursor}`);
+        
+        if (shouldRenderCursor) {
             this.renderPlayerCursor(player);
         }
     }
