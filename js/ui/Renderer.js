@@ -406,8 +406,12 @@ export class Renderer {
         this.ctx.fillStyle = player.color;
         this.ctx.font = 'bold 12px Arial';
         this.ctx.textAlign = 'center';
+        
+        // Calculer canons restants pour ce joueur
+        const cannonsLeft = this.gameManager.calculateCannonsToPlace(player.id);
+        
         this.ctx.fillText(
-            `J${player.id}`, 
+            `J${player.id} (${cannonsLeft})`, 
             screenPos.x + this.cellSize, 
             screenPos.y - 8
         );

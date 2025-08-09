@@ -188,6 +188,13 @@ export class Player {
     setCastle(core, walls) {
         this.castle.core = core;
         this.castle.walls = walls;
+        
+        // Mettre à jour la position du curseur près du château
+        if (core && this.controlType !== 'mouse') {
+            this.cursorPosition = { x: core.x, y: core.y };
+            console.log(`Curseur Joueur ${this.id} placé au château: (${core.x}, ${core.y})`);
+        }
+        
         this.checkCastleClosure();
     }
 

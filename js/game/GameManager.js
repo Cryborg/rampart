@@ -573,11 +573,15 @@ export class GameManager {
             return false;
         }
         
-        // Vérifier que les 4 cellules sont toutes dans la zone constructible
+        // Vérifier que les 4 cellules sont toutes dans la zone constructible DU BON JOUEUR
+        const targetPlayerId = playerId || this.players[this.currentPlayer].id;
+        
         for (let dx = 0; dx < 2; dx++) {
             for (let dy = 0; dy < 2; dy++) {
                 const cell = this.grid.getCell(x + dx, y + dy);
-                if (!cell || !cell.cannonZone || cell.type !== 'land') {
+                if (!cell || !cell.cannonZone || cell.type !== 'land' || 
+                    cell.cannonZoneOwnerId !== targetPlayerId) {
+                    console.log(`DEBUG: Canon invalide à (${x + dx}, ${y + dy}): cannonZone=${cell?.cannonZone}, ownerId=${cell?.cannonZoneOwnerId}, targetId=${targetPlayerId}`);
                     return false;
                 }
             }
