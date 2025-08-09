@@ -99,15 +99,21 @@ export class Player {
      * Vérifier si une touche appartient à ce joueur
      */
     ownsKey(keyCode) {
+        console.log(`DEBUG ownsKey Joueur ${this.id}: keyCode="${keyCode}", controlScheme=${this.controlScheme ? this.controlScheme.type : 'null'}`);
+        
         if (!this.controlScheme || this.controlScheme.type === 'mouse') {
+            console.log(`  -> false (souris ou pas de scheme)`);
             return false; // La souris est gérée globalement
         }
         
         if (!this.controlScheme.keys) {
+            console.log(`  -> false (pas de keys)`);
             return false; // Pas de schéma de touches défini
         }
         
-        return Object.values(this.controlScheme.keys).includes(keyCode);
+        const owns = Object.values(this.controlScheme.keys).includes(keyCode);
+        console.log(`  -> ${owns} (keys: ${JSON.stringify(this.controlScheme.keys)})`);
+        return owns;
     }
 
     /**

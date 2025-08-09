@@ -192,9 +192,15 @@ export class GameManager {
         }
 
         // Trouver le joueur qui possède cette touche
+        console.log(`DEBUG: Recherche propriétaire de "${keyCode}" parmi ${this.players.length} joueurs`);
+        this.players.forEach((p, i) => {
+            console.log(`  Joueur ${p.id}: controlType="${p.controlType}", ownsKey="${keyCode}"=${p.ownsKey(keyCode)}`);
+        });
+        
         const targetPlayer = this.players.find(player => player.ownsKey(keyCode));
         
         if (targetPlayer) {
+            console.log(`DEBUG: Touche "${keyCode}" appartient au Joueur ${targetPlayer.id}`);
             const action = targetPlayer.getActionForKey(keyCode);
             
             // En mode multijoueur, vérifier si c'est le tour de ce joueur pour certaines actions
@@ -207,6 +213,7 @@ export class GameManager {
                 this.handlePlayerKeyboardAction(targetPlayer, action, keyCode);
             }
         } else {
+            console.log(`DEBUG: Aucun joueur ne possède la touche "${keyCode}" - Fallback vers handleKeyDown`);
             // Fallback : si aucun joueur ne possède cette touche, l'envoyer au joueur actuel
             this.handleKeyDown(keyCode);
         }
