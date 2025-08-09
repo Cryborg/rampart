@@ -96,8 +96,12 @@ export class Player {
      * Vérifier si une touche appartient à ce joueur
      */
     ownsKey(keyCode) {
-        if (this.controlScheme.type === 'mouse') {
+        if (!this.controlScheme || this.controlScheme.type === 'mouse') {
             return false; // La souris est gérée globalement
+        }
+        
+        if (!this.controlScheme.keys) {
+            return false; // Pas de schéma de touches défini
         }
         
         return Object.values(this.controlScheme.keys).includes(keyCode);

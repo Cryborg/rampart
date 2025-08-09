@@ -238,16 +238,14 @@ export class GameManager {
      * Vérifier si un joueur peut effectuer une action selon le mode de jeu
      */
     isPlayerActionAllowed(player, action) {
-        // En mode multijoueur simultané (combat) : toutes les actions autorisées
-        if (this.gameState.currentState === 'COMBAT') {
+        // Dans Rampart, TOUTES les phases gameplay sont simultanées !
+        if (this.gameState.currentState === 'COMBAT' || 
+            this.gameState.currentState === 'PLACE_CANNONS' || 
+            this.gameState.currentState === 'REPAIR') {
             return true;
         }
         
-        // En phases séquentielles : seul le joueur actuel peut agir
-        if (this.gameState.currentState === 'PLACE_CANNONS' || this.gameState.currentState === 'REPAIR') {
-            return player.id === this.getCurrentPlayer().id;
-        }
-        
+        // Autres phases (menu, etc.) - pas de restriction
         return true;
     }
 
@@ -551,13 +549,16 @@ export class GameManager {
     }
     
     calculateMaxCannonsForPhase() {
-        // Compter SEULEMENT les cases dorées LIBRES (pas occupées par des canons)
+        // Compter SEULEMENT les cases dorées LIBRES du JOUEUR ACTUEL
+        const currentPlayerId = this.players[this.currentPlayer].id;
         let freeGoldenCells = 0;
+        
         for (let y = 0; y < this.grid.height; y++) {
             for (let x = 0; x < this.grid.width; x++) {
                 const cell = this.grid.getCell(x, y);
-                // Case dorée ET libre (pas un canon)
-                if (cell && cell.cannonZone && cell.type === 'land') {
+                // Case dorée ET libre (pas un canon) ET appartenant au joueur actuel
+                if (cell && cell.cannonZone && cell.type === 'land' && 
+                    cell.cannonZoneOwnerId === currentPlayerId) {
                     freeGoldenCells++;
                 }
             }
@@ -566,7 +567,7 @@ export class GameManager {
         // Formule Rampart : floor(40% * (cases_dorées_libres / 4))
         const maxCannons = Math.floor(GAME_CONFIG.GAMEPLAY.CANNON_RATIO * (freeGoldenCells / 4));
         
-        console.log(`🎯 Cases dorées libres: ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
+        console.log(`🎯 Cases dorées libres (Joueur ${currentPlayerId}): ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
         return Math.max(GAME_CONFIG.GAMEPLAY.MIN_CANNONS, maxCannons);
     }
 
@@ -733,15 +734,33 @@ export class GameManager {
     }
 
     checkCastleClosure() {
+        // Nettoyer les anciennes zones de canons pour éviter les zones fantômes
+        this.clearCannonZones();
+        
         const closedCastles = this.grid.findClosedCastles();
         
         if (closedCastles.length > 0) {
             console.log(`🏰 ${closedCastles.length} château(x) fermé(s) détecté(s) !`);
             
-            // Colorier TOUS les châteaux fermés
+            // Colorier chaque château fermé en l'associant à son propriétaire
             closedCastles.forEach((castle, index) => {
-                console.log(`🏰 Château ${index + 1}: Zone de ${castle.size} cellules`);
-                this.highlightConstructibleArea(castle.area);
+                // Trouver le joueur propriétaire de ce château
+                let ownerId = null;
+                if (castle.cores && castle.cores.length > 0) {
+                    // Trouver le joueur qui possède ce core
+                    const core = castle.cores[0];
+                    for (let player of this.players) {
+                        if (player.castle.core && 
+                            player.castle.core.x === core.x && 
+                            player.castle.core.y === core.y) {
+                            ownerId = player.id;
+                            break;
+                        }
+                    }
+                }
+                
+                console.log(`🏰 Château ${index + 1}: Zone de ${castle.size} cellules (Joueur ${ownerId})`);
+                this.highlightConstructibleArea(castle.area, ownerId);
             });
             
             console.log('🎯 Zones constructibles colorées ! Continue à construire jusqu\'à la fin du timer.');
@@ -754,8 +773,8 @@ export class GameManager {
         }
     }
 
-    highlightConstructibleArea(area) {
-        // Marquer toutes les cellules de la zone comme constructibles
+    highlightConstructibleArea(area, playerId = null) {
+        // Marquer toutes les cellules de la zone comme constructibles pour un joueur spécifique
         area.forEach(({x, y}) => {
             const cell = this.grid.getCell(x, y);
             // Inclure: terre libre, canons existants, château, et cellules détruites
@@ -763,10 +782,32 @@ export class GameManager {
                 // Ajouter une propriété pour marquer comme zone de canons
                 // Important: inclure TOUS les types de cellules dans les zones fermées !
                 cell.cannonZone = true;
+                
+                // IMPORTANT: Associer la zone à un joueur spécifique
+                if (playerId !== null) {
+                    cell.cannonZoneOwnerId = playerId;
+                }
             }
         });
         
-        console.log(`🎯 Zone constructible mise en surbrillance: ${area.length} cellules`);
+        const ownerInfo = playerId ? ` (Joueur ${playerId})` : '';
+        console.log(`🎯 Zone constructible mise en surbrillance: ${area.length} cellules${ownerInfo}`);
+    }
+    
+    /**
+     * Nettoyer toutes les zones de canons (pour éviter les zones fantômes)
+     */
+    clearCannonZones() {
+        for (let y = 0; y < this.grid.height; y++) {
+            for (let x = 0; x < this.grid.width; x++) {
+                const cell = this.grid.getCell(x, y);
+                if (cell) {
+                    cell.cannonZone = false;
+                    cell.cannonZoneOwnerId = null;
+                }
+            }
+        }
+        console.log('🧽 Zones de canons nettoyées');
     }
 
     recalculateCannonZones() {
@@ -1069,11 +1110,20 @@ export class GameManager {
         const gameMode = activePlayers === 2 ? '2players' : '3players';
         this.setupDefaultLevel(gameMode);
         
+        console.log('🔍 Debug après setupDefaultLevel:');
+        console.log(`  - Joueurs: ${this.players.length}`);
+        console.log(`  - GameState: ${this.gameState.currentState}`);
+        console.log(`  - Château fermés:`, this.players.map(p => p.castle.isClosed));
+        
         // Reconnecter les callbacks GameState
         this.setupGameStateCallbacks();
         
         // Démarrer le jeu
         this.startGameLoop();
+        
+        // Lancer la première phase
+        console.log('🚀 Lancement de la phase PLACE_CANNONS...');
+        this.gameState.transition('PLACE_CANNONS');
         
         console.log('✅ Jeu multijoueur démarré !');
     }

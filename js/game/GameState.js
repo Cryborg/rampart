@@ -52,12 +52,10 @@ export class GameState {
         // Dans Rampart, TOUTES les phases sont simultanées !
         this.isSequentialPhase = false;
         
-        // Réinitialiser les tours multijoueurs
-        if (this.isSequentialPhase) {
-            this.currentPlayerTurn = 0;
-            this.playersFinishedTurn.clear();
-            console.log(`👥 Phase séquentielle ${newState} commencée - Tour du joueur 1`);
-        }
+        // Pas de tours multijoueurs en Rampart - tout est simultané
+        this.currentPlayerTurn = 0;
+        this.playersFinishedTurn.clear();
+        console.log(`👥 Phase simultanée ${newState} commencée - tous joueurs actifs`);
         
         this.phaseStartTime = Date.now();
         this.phaseTimeLeft = PHASE_DURATIONS[newState] || 0;
@@ -179,13 +177,7 @@ export class GameState {
      * Vérifier si un joueur peut agir (selon la phase et le mode)
      */
     canPlayerAct(playerId) {
-        if (!this.isMultiplayer) return true;
-        
-        if (this.isSequentialPhase) {
-            return playerId === this.currentPlayerTurn && !this.playersFinishedTurn.has(playerId);
-        }
-        
-        // En phases simultanées (combat), tous les joueurs peuvent agir
+        // Dans Rampart, TOUS les joueurs peuvent TOUJOURS agir (gameplay simultané)
         return true;
     }
 
