@@ -127,7 +127,91 @@ export const GAME_CONFIG = {
         PROJECTILE_SPEED: 15,
         ENEMY_PROJECTILE_SPEED: 8,
         PROJECTILE_LIFETIME: 5000, // 5 secondes
-        DAMAGE_REDUCTION_DISTANCE: 0.5
+        
+        // Configuration des projectiles par type
+        PROJECTILE_CONFIGS: {
+            CANNON: {
+                SPEED: 15,
+                DAMAGE: 2,
+                SIZE: 4,
+                COLOR: '#ff6b35',
+                LIFETIME: 5000
+            },
+            SHIP: {
+                SPEED: 8,
+                DAMAGE: 1,
+                SIZE: 3,
+                COLOR: '#ff4444',
+                LIFETIME: 5000
+            },
+            ARROW: {
+                SPEED: 12,
+                DAMAGE: 1,
+                SIZE: 2,
+                COLOR: '#8b4513',
+                LIFETIME: 3000
+            }
+        }
+    },
+    
+    // ===============================
+    // EXPLOSIONS ET EFFETS VISUELS
+    // ===============================
+    EXPLOSIONS: {
+        STANDARD: {
+            DURATION: 800,
+            MAX_RADIUS: 32,
+            COLOR: '#ff9900',
+            PHASE_COLORS: {
+                FLASH: '#ffffff',
+                FIRE: '#ff6600',
+                SMOKE: '#666666'
+            }
+        },
+        WATER: {
+            DURATION: 600,
+            MAX_RADIUS: 24,
+            COLOR: '#4da6ff',
+            PHASE_COLORS: {
+                FLASH: '#ffffff',
+                FIRE: '#66ccff',
+                SMOKE: '#336699'
+            }
+        },
+        STRUCTURE: {
+            DURATION: 1000,
+            MAX_RADIUS: 40,
+            COLOR: '#ff6600',
+            PHASE_COLORS: {
+                FLASH: '#ffff00',
+                FIRE: '#ff3300',
+                SMOKE: '#333333'
+            }
+        }
+    },
+    
+    VISUAL_EFFECTS: {
+        MUZZLE_FLASH_DURATION: 150,
+        MUZZLE_FLASH_SIZE: 8,
+        MUZZLE_FLASH_COLOR: '#ffff99',
+        
+        IMPACTS: {
+            STANDARD: {
+                DURATION: 400,
+                PARTICLE_COUNT: 8,
+                COLOR: '#ff9900'
+            },
+            WATER: {
+                DURATION: 300,
+                PARTICLE_COUNT: 12,
+                COLOR: '#66ccff'
+            },
+            STRUCTURE: {
+                DURATION: 600,
+                PARTICLE_COUNT: 15,
+                COLOR: '#ff6600'
+            }
+        }
     },
     
     // ===============================
@@ -205,10 +289,7 @@ export const GAME_CONFIG = {
         SPAWN_INTERVAL: 2000,   // 2 secondes entre spawns
         MAX_ENEMIES: 8,
         DIFFICULTY_SCALING: 1.2,
-        SHORE_DISTANCE_THRESHOLD: 1.5,
-        SEARCH_RADIUS: 50,
-        TARGET_SEARCH_INTERVAL: 2000,
-        LANDING_COOLDOWN: 5000
+        LANDING_COOLDOWN: 5000  // Les autres constantes sont dans LAND_UNITS
     },
     
     // ===============================
@@ -241,10 +322,7 @@ export const GAME_CONFIG = {
     PATHFINDING: {
         MAX_STEPS: 500,
         MAX_STEPS_LAND: 100,
-        AVOIDANCE_RADIUS_MULTIPLIER: 1.5,
-        AVOIDANCE_STRENGTH: 0.3,
-        AVOIDANCE_STRENGTH_LAND: 0.2,
-        PATH_TOLERANCE: 1.5
+        PATH_TOLERANCE: 1.5  // Constantes d'évitement supprimées (non utilisées)
     },
     
     // ===============================

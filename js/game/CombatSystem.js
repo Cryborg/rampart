@@ -1,7 +1,7 @@
-import { Projectile } from './Projectile.js';
 import { CELL_TYPES } from './Grid.js';
 import { GAME_CONFIG } from '../config/GameConstants.js';
 import { getDistance } from '../utils/GameUtils.js';
+import { EntityFactory } from '../services/EntityFactory.js';
 
 export class CombatSystem {
     constructor(gameManager) {
@@ -78,15 +78,11 @@ export class CombatSystem {
      */
     fireFromCannon(cannon, targetX, targetY) {
         // Créer le projectile depuis le centre du canon 2x2
-        const projectile = new Projectile(
-            cannon.x + 1, cannon.y + 1,
-            targetX, targetY,
-            {
-                speed: GAME_CONFIG.COMBAT.PROJECTILE_SPEED,
-                damage: 2,
-                type: 'cannonball',
-                color: GAME_CONFIG.COLORS.PLAYER_PROJECTILE
-            }
+        const projectile = EntityFactory.createCannonProjectile(
+            cannon.x + 1, 
+            cannon.y + 1,
+            targetX, 
+            targetY
         );
 
         // Configurer l'impact
@@ -112,7 +108,7 @@ export class CombatSystem {
         const gridY = Math.floor(y);
         
         // Effet d'explosion
-        this.createExplosion(gridX, gridY, projectile.damage);
+        this.renderer.explosions.push(EntityFactory.createExplosion(gridX, gridY, projectile.damage));
         
         // Dégâts dans le rayon d'explosion
         this.applyExplosionDamage(gridX, gridY, this.config.explosionRadius, projectile.damage);
@@ -368,19 +364,6 @@ export class CombatSystem {
     /**
      * Créer un effet d'explosion visuel
      */
-    createExplosion(x, y, intensity = 1) {
-        // Animation d'explosion (sera utilisée par le renderer)
-        const explosion = {
-            x: x,
-            y: y,
-            intensity: intensity,
-            startTime: Date.now(),
-            duration: 800
-        };
-        
-        console.log(`💥 Explosion créée à (${x}, ${y}) intensité ${intensity}`);
-        return explosion;
-    }
 
     /**
      * Mettre à jour tous les projectiles

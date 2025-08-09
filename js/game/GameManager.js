@@ -396,51 +396,72 @@ export class GameManager {
      */
     validatePlayerCannons() {
         this.players.forEach(player => {
-            let activeCount = 0;
-            let inactiveCount = 0;
-            
-            console.log(`🔍 DEBUG: Validation canons joueur ${player.id} - ${player.cannons.length} canons à vérifier`);
-            
-            player.cannons.forEach((cannon, i) => {
-                // Vérifier si ce canon est dans une zone fermée
-                let cannonInClosedZone = true;
-                let cannonZoneCells = 0;
-                
-                for (let dx = 0; dx < 2; dx++) {
-                    for (let dy = 0; dy < 2; dy++) {
-                        const cell = this.grid.getCell(cannon.x + dx, cannon.y + dy);
-                        if (!cell) {
-                            cannonInClosedZone = false;
-                            break;
-                        }
-                        if (cell.cannonZone) {
-                            cannonZoneCells++;
-                        }
-                        if (!cell.cannonZone) {
-                            cannonInClosedZone = false;
-                        }
-                    }
-                    if (!cannonInClosedZone) break;
-                }
-                
-                // CORRECTION: Marquer comme actif/inactif au lieu de supprimer
-                cannon.canFire = cannonInClosedZone;
-                
-                if (cannonInClosedZone) {
-                    activeCount++;
-                } else {
-                    inactiveCount++;
-                }
-                
-                console.log(`  Canon ${i} (${cannon.x},${cannon.y}): canFire=${cannon.canFire} (${cannonZoneCells}/4 cellules)`);
-            });
-            
-            console.log(`🎯 Joueur ${player.id}: ${activeCount} canons actifs, ${inactiveCount} inactifs (total: ${player.cannons.length})`);
-            
-            if (inactiveCount > 0) {
-                console.log(`⚠️ ${inactiveCount} canon(s) temporairement désactivé(s) - répare ton château !`);
-            }
+            const stats = this.validateSinglePlayerCannons(player);
+            this.logCannonValidationResults(player, stats);
         });
+    }
+    
+    /**
+     * Valide les canons d'un seul joueur
+     */
+    validateSinglePlayerCannons(player) {
+        let activeCount = 0;
+        let inactiveCount = 0;
+        
+        console.log(`🔍 DEBUG: Validation canons joueur ${player.id} - ${player.cannons.length} canons à vérifier`);
+        
+        player.cannons.forEach((cannon, i) => {
+            const validation = this.checkCannonInClosedZone(cannon);
+            cannon.canFire = validation.inClosedZone;
+            
+            if (validation.inClosedZone) {
+                activeCount++;
+            } else {
+                inactiveCount++;
+            }
+            
+            console.log(`  Canon ${i} (${cannon.x},${cannon.y}): canFire=${cannon.canFire} (${validation.cannonZoneCells}/4 cellules)`);
+        });
+        
+        return { activeCount, inactiveCount, totalCount: player.cannons.length };
+    }
+    
+    /**
+     * Vérifie si un canon 2x2 est dans une zone fermée
+     */
+    checkCannonInClosedZone(cannon) {
+        let inClosedZone = true;
+        let cannonZoneCells = 0;
+        
+        for (let dx = 0; dx < 2; dx++) {
+            for (let dy = 0; dy < 2; dy++) {
+                const cell = this.grid.getCell(cannon.x + dx, cannon.y + dy);
+                if (!cell) {
+                    inClosedZone = false;
+                    break;
+                }
+                if (cell.cannonZone) {
+                    cannonZoneCells++;
+                }
+                if (!cell.cannonZone) {
+                    inClosedZone = false;
+                }
+            }
+            if (!inClosedZone) break;
+        }
+        
+        return { inClosedZone, cannonZoneCells };
+    }
+    
+    /**
+     * Log les résultats de validation des canons
+     */
+    logCannonValidationResults(player, stats) {
+        console.log(`🎯 Joueur ${player.id}: ${stats.activeCount} canons actifs, ${stats.inactiveCount} inactifs (total: ${stats.totalCount})`);
+        
+        if (stats.inactiveCount > 0) {
+            console.log(`⚠️ ${stats.inactiveCount} canon(s) temporairement désactivé(s) - répare ton château !`);
+        }
     }
 
     checkCastleClosure() {

@@ -10,21 +10,6 @@ export function getDistance(x1, y1, x2, y2) {
     return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
 
-/**
- * Calcule la distance Manhattan entre deux points
- */
-export function getManhattanDistance(x1, y1, x2, y2) {
-    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
-}
-
-/**
- * Normalise un vecteur
- */
-export function normalizeVector(dx, dy) {
-    const length = Math.sqrt(dx * dx + dy * dy);
-    if (length === 0) return { x: 0, y: 0 };
-    return { x: dx / length, y: dy / length };
-}
 
 /**
  * Clamp une valeur entre min et max
@@ -94,12 +79,6 @@ export function toDegrees(radians) {
     return radians * (180 / Math.PI);
 }
 
-/**
- * Calcule l'angle entre deux points
- */
-export function getAngleBetween(x1, y1, x2, y2) {
-    return Math.atan2(y2 - y1, x2 - x1);
-}
 
 /**
  * Ajuste la luminosité d'une couleur hexadécimale

@@ -2,6 +2,8 @@ import { Projectile } from './Projectile.js';
 import { CELL_TYPES } from './Grid.js';
 import { GAME_CONFIG } from '../config/GameConstants.js';
 import { getDistance, Logger } from '../utils/GameUtils.js';
+import { PathfindingService } from '../services/PathfindingService.js';
+import { LandUnitFactory } from './LandUnit.js';
 
 // Utilisation des niveaux d'expérience depuis les constantes
 export const EXPERIENCE_LEVELS = GAME_CONFIG.EXPERIENCE_LEVELS;
@@ -456,83 +458,16 @@ export class EnemyShip {
     }
 
     createInfantry(x, y) {
-        // Import dynamique pour éviter les dépendances circulaires
-        return new (class Infantry {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.type = 'infantry';
-                this.health = 2;
-                this.maxHealth = 2;
-                this.speed = 1.2;
-                this.size = 0.5;
-                this.damage = 1;
-                this.active = true;
-                this.target = null;
-                this.path = [];
-                this.pathIndex = 0;
-                this.isMoving = false;
-                this.aiState = 'seeking';
-                this.searchRadius = 20;
-                this.lastTargetSearch = 0;
-                this.targetSearchInterval = 3000;
-                this.color = '#8B4513';
-            }
-            
-            // Méthodes basiques pour le rendu et l'update - à compléter avec LandUnit
-            update(deltaTime, gameManager) { /* TODO: implémenter */ }
-            render(ctx, renderer) { /* TODO: implémenter */ }
-            takeDamage(damage) { 
-                this.health -= damage;
-                if (this.health <= 0) {
-                    this.active = false;
-                    return true;
-                }
-                return false;
-            }
-        })(x, y);
+        return LandUnitFactory.createInfantry(x, y);
     }
 
     createTank(x, y) {
-        return new (class Tank {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.type = 'tank';
-                this.health = 5;
-                this.maxHealth = 5;
-                this.speed = 0.8;
-                this.size = 0.8;
-                this.damage = 2;
-                this.active = true;
-                this.target = null;
-                this.path = [];
-                this.pathIndex = 0;
-                this.isMoving = false;
-                this.aiState = 'seeking';
-                this.searchRadius = 20;
-                this.lastTargetSearch = 0;
-                this.targetSearchInterval = 3000;
-                this.color = '#2d4a22';
-            }
-            
-            // Méthodes basiques pour le rendu et l'update - à compléter avec LandUnit
-            update(deltaTime, gameManager) { /* TODO: implémenter */ }
-            render(ctx, renderer) { /* TODO: implémenter */ }
-            takeDamage(damage) { 
-                this.health -= damage;
-                if (this.health <= 0) {
-                    this.active = false;
-                    return true;
-                }
-                return false;
-            }
-        })(x, y);
+        return LandUnitFactory.createTank(x, y);
     }
 
     calculatePathTo(targetX, targetY, grid) {
         // Pathfinding simple (A* simplifié pour l'eau)
-        this.path = this.findWaterPath(this.x, this.y, targetX, targetY, grid);
+        this.path = PathfindingService.findWaterPath(this.x, this.y, targetX, targetY, grid);
         this.pathIndex = 0;
         this.isMoving = this.path.length > 0;
         
@@ -544,102 +479,6 @@ export class EnemyShip {
         }
     }
 
-    findWaterPath(startX, startY, endX, endY, grid) {
-        // Algorithme A* simplifié pour navigation maritime
-        const path = [];
-        const visited = new Set();
-        
-        // Utiliser un tableau de priority queue basique (A* avec heuristique)
-        const queue = [{ 
-            x: Math.floor(startX), 
-            y: Math.floor(startY), 
-            path: [], 
-            cost: 0,
-            heuristic: getDistance(Math.floor(startX), Math.floor(startY), endX, endY)
-        }];
-        
-        const maxSteps = 500; // Augmenté pour longues distances
-        let steps = 0;
-        
-        console.log(`🗺️ Pathfinding depuis (${Math.floor(startX)}, ${Math.floor(startY)}) vers (${endX}, ${endY})`);
-        
-        // Debug initial : vérifier la cellule de départ
-        const startCell = grid.getCell(Math.floor(startX), Math.floor(startY));
-        console.log(`📍 Cellule de départ (${Math.floor(startX)}, ${Math.floor(startY)}): ${startCell ? startCell.type : 'null'}`);
-        
-        // Debug: vérifier quelques cellules vers l'ouest depuis la position de départ
-        for (let i = 0; i < 5; i++) {
-            const checkX = Math.floor(startX) - i;
-            const checkY = Math.floor(startY);
-            if (grid.isValidPosition(checkX, checkY)) {
-                const cell = grid.getCell(checkX, checkY);
-                console.log(`🔍 Cellule (${checkX}, ${checkY}): ${cell ? cell.type : 'null'} - navigable: ${this.canNavigateTo(checkX, checkY, grid)}`);
-            }
-        }
-        
-        while (queue.length > 0 && steps < maxSteps) {
-            steps++;
-            
-            // Tri simple pour A* (prendre le nœud avec le plus petit coût total)
-            queue.sort((a, b) => (a.cost + a.heuristic) - (b.cost + b.heuristic));
-            const current = queue.shift();
-            
-            const key = `${current.x},${current.y}`;
-            if (visited.has(key)) continue;
-            visited.add(key);
-            
-            // Arrivé à destination
-            const distance = getDistance(current.x, current.y, endX, endY);
-            if (distance <= 1.5) {
-                console.log(`✅ Chemin trouvé en ${steps} étapes: ${current.path.length} nœuds`);
-                return current.path;
-            }
-            
-            // Explorer les voisins (priorité aux directions principales pour performance)
-            const neighbors = [
-                { x: current.x - 1, y: current.y },     // Vers l'ouest (priorité)
-                { x: current.x, y: current.y + 1 },     // Sud
-                { x: current.x, y: current.y - 1 },     // Nord
-                { x: current.x + 1, y: current.y },     // Est
-                { x: current.x - 1, y: current.y - 1 }, // Nord-ouest
-                { x: current.x - 1, y: current.y + 1 }, // Sud-ouest
-                { x: current.x + 1, y: current.y - 1 }, // Nord-est
-                { x: current.x + 1, y: current.y + 1 }  // Sud-est
-            ];
-            
-            for (let neighbor of neighbors) {
-                if (!this.canNavigateTo(neighbor.x, neighbor.y, grid)) continue;
-                
-                const neighborKey = `${neighbor.x},${neighbor.y}`;
-                if (visited.has(neighborKey)) continue;
-                
-                const newCost = current.cost + 1;
-                const heuristic = getDistance(neighbor.x, neighbor.y, endX, endY);
-                
-                queue.push({
-                    x: neighbor.x,
-                    y: neighbor.y,
-                    path: [...current.path, { x: neighbor.x, y: neighbor.y }],
-                    cost: newCost,
-                    heuristic: heuristic
-                });
-            }
-        }
-        
-        // Aucun chemin trouvé
-        console.log(`⚠️ Aucun chemin naval trouvé vers (${endX}, ${endY}) après ${steps} étapes`);
-        return [];
-    }
-
-    canNavigateTo(x, y, grid) {
-        if (!grid.isValidPosition(x, y)) return false;
-        
-        const cell = grid.getCell(x, y);
-        if (!cell) return false;
-        
-        // Les bateaux ne peuvent naviguer que sur l'eau (simple !)
-        return cell.type === 'water';
-    }
 
     calculateFleeRoute(grid) {
         // Fuir vers le bord de la carte le plus proche

@@ -1,6 +1,7 @@
 import { CELL_TYPES, CELL_PROPERTIES } from '../game/Grid.js';
 import { GAME_CONFIG } from '../config/GameConstants.js';
 import { adjustBrightness, rgbToHex, hexToRgb } from '../utils/GameUtils.js';
+import { CoordinateService } from '../services/CoordinateService.js';
 
 export class Renderer {
     constructor(canvas, ctx) {
@@ -482,22 +483,20 @@ export class Renderer {
     }
 
     screenToGrid(canvasX, canvasY) {
-        // Conversion directe canvas → grille
-        const rawGridX = Math.floor((canvasX - this.gridOffsetX) / this.cellSize);
-        const rawGridY = Math.floor((canvasY - this.gridOffsetY) / this.cellSize);
-        
-        // Clamping intelligent dans les limites réelles de la grille
-        const gridX = Math.max(0, Math.min(GAME_CONFIG.GRID_WIDTH - 1, rawGridX));
-        const gridY = Math.max(0, Math.min(GAME_CONFIG.GRID_HEIGHT - 1, rawGridY));
-        
-        return { x: gridX, y: gridY };
+        return CoordinateService.canvasToGrid(
+            canvasX, canvasY, 
+            this.gridOffsetX, this.gridOffsetY, 
+            this.cellSize, 
+            GAME_CONFIG.GRID_WIDTH, GAME_CONFIG.GRID_HEIGHT
+        );
     }
 
     gridToScreen(gridX, gridY) {
-        return {
-            x: this.gridOffsetX + gridX * this.cellSize,
-            y: this.gridOffsetY + gridY * this.cellSize
-        };
+        return CoordinateService.gridToCanvas(
+            gridX, gridY, 
+            this.gridOffsetX, this.gridOffsetY, 
+            this.cellSize
+        );
     }
 
     // Animation system

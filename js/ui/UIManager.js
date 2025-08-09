@@ -1,5 +1,9 @@
+import { EventManager } from '../services/EventManager.js';
+
 export class UIManager {
     constructor() {
+        this.eventManager = new EventManager();
+        this.eventGroup = this.eventManager.createGroup();
         this.elements = {
             // Overlays
             menuOverlay: null,
@@ -139,34 +143,25 @@ export class UIManager {
         }
         
         const closeControls = document.getElementById('closeControls');
-        if (closeControls) {
-            closeControls.addEventListener('click', () => {
-                this.hideControlsPanel();
-            });
-        }
+        // Utiliser event delegation pour éviter les recherches d'éléments répétées
+        this.eventGroup.addDelegate(document.body, '#closeControls', 'click', () => {
+            this.hideControlsPanel();
+        });
         
-        const testControls = document.getElementById('testControls');
-        if (testControls) {
-            testControls.addEventListener('click', () => {
-                this.testControlsConfiguration();
-            });
-        }
+        this.eventGroup.addDelegate(document.body, '#testControls', 'click', () => {
+            this.testControlsConfiguration();
+        });
         
-        // Game over buttons
-        const restartGame = document.getElementById('restartGame');
-        if (restartGame) {
-            restartGame.addEventListener('click', () => {
-                this.hideGameOver();
-                if (this.callbacks.onRestart) this.callbacks.onRestart();
-            });
-        }
+        // Game over buttons avec delegation
+        this.eventGroup.addDelegate(document.body, '#restartGame', 'click', () => {
+            this.hideGameOver();
+            if (this.callbacks.onRestart) this.callbacks.onRestart();
+        });
         
-        const backToMenu = document.getElementById('backToMenu');
-        if (backToMenu) {
-            backToMenu.addEventListener('click', () => {
-                this.hideGameOver();
-                this.showMenu();
-            });
+        this.eventGroup.addDelegate(document.body, '#backToMenu', 'click', () => {
+            this.hideGameOver();
+            this.showMenu();
+        });
         }
     }
 
@@ -455,4 +450,20 @@ export class UIManager {
     set onShowControls(callback) { this.callbacks.onShowControls = callback; }
     set onConfigureControls(callback) { this.callbacks.onConfigureControls = callback; }
     set onRestart(callback) { this.callbacks.onRestart = callback; }
+    
+    /**
+     * Nettoie tous les event listeners
+     */
+    cleanup() {
+        this.eventGroup.clear();
+        this.eventManager.cleanup();
+        console.log('🧹 UIManager nettoyé');
+    }
+    
+    /**
+     * Obtient les statistiques d'événements pour debug
+     */
+    getEventStats() {
+        return this.eventManager.getStats();
+    }
 }
