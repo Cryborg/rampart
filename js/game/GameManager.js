@@ -1031,28 +1031,28 @@ export class GameManager {
     }
 
     startCombatPhase() {
-        console.log('⚔️ Phase de combat démarrée');
+        console.log('Phase de combat démarrée');
         
         // Debug: lister tous les canons des joueurs
         this.players.forEach((player, idx) => {
-            console.log(`👤 Joueur ${player.id} - ${player.cannons.length} canons:`, 
+            console.log(`Joueur ${player.id} - ${player.cannons.length} canons:`, 
                 player.cannons.map(c => `(${c.x},${c.y})`).join(', '));
         });
         
         // En mode multijoueur, pas d'ennemis IA - combat entre joueurs seulement
         if (this.players.length > 1) {
-            console.log('👥 Mode multijoueur: Pas d'ennemis IA - Combat entre joueurs uniquement');
+            console.log('Mode multijoueur: Pas d ennemis IA - Combat entre joueurs uniquement');
             // Combat simultané entre joueurs - pas de vague d'ennemis
             // La phase se termine automatiquement par le timer
         } else if (this.waveManager) {
             // Mode solo: démarrer une nouvelle vague d'ennemis
-            console.log('🤖 Mode solo: Démarrage vague d'ennemis');
+            console.log('Mode solo: Demarrage vague d ennemis');
             this.waveManager.startWave();
         } else {
-            console.warn('⚠️ WaveManager non initialisé, combat simulé');
+            console.warn('WaveManager non initialise, combat simule');
             // Fallback: transition automatique après 10 secondes
             setTimeout(() => {
-                console.log('⚔️ Combat simulé terminé ! Transition vers réparation.');
+                console.log('Combat simule termine ! Transition vers reparation.');
                 this.gameState.transition('REPAIR');
             }, 10000);
         }
