@@ -107,13 +107,10 @@ export class CombatSystem {
         const gridX = Math.floor(x);
         const gridY = Math.floor(y);
         
-        // Effet d'explosion
-        this.renderer.explosions.push(EntityFactory.createExplosion(gridX, gridY, projectile.damage));
-        
         // Dégâts dans le rayon d'explosion
         this.applyExplosionDamage(gridX, gridY, this.config.explosionRadius, projectile.damage);
         
-        // Effet visuel
+        // Effet visuel d'explosion
         if (this.renderer) {
             this.renderer.addExplosion(gridX, gridY);
         }
