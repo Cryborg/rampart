@@ -50,6 +50,7 @@ export class Player {
      * Obtenir le schéma de contrôles selon le type
      */
     getControlScheme(controlType) {
+        console.log(`DEBUG getControlScheme called with controlType: "${controlType}"`);
         const schemes = {
             mouse: {
                 // La souris est gérée différemment
@@ -94,7 +95,9 @@ export class Player {
             }
         };
 
-        return schemes[controlType] || schemes.mouse;
+        const result = schemes[controlType] || schemes.mouse;
+        console.log(`DEBUG getControlScheme returning:`, result);
+        return result;
     }
 
     /**
@@ -297,7 +300,7 @@ export class Player {
         }
     }
 
-    getControlScheme() {
+    getControlMapping() {
         const schemes = {
             mouse: {
                 move: 'mousemove',
