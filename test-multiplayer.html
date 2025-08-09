@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rampart - Test Multijoueur</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        body {
+            background: #1a252f;
+            color: #ecf0f1;
+            font-family: Arial, sans-serif;
+        }
+        
+        .test-header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 78, 137, 0.9);
+            margin-bottom: 20px;
+        }
+        
+        .controls-info {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        .player-controls {
+            text-align: center;
+            padding: 15px;
+            border: 2px solid;
+            border-radius: 10px;
+            min-width: 200px;
+        }
+        
+        .player1 { border-color: #ff6b35; }
+        .player2 { border-color: #004e89; }
+        
+        .controls-list {
+            text-align: left;
+            margin-top: 10px;
+        }
+        
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #ff6b35;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-header">
+        <h1>🎮 Rampart - Test Multijoueur Local</h1>
+        <p>Mode 2 joueurs avec contrôles séparés</p>
+    </div>
+    
+    <div class="controls-info">
+        <div class="player-controls player1">
+            <h3>🖱️ Joueur 1 (Orange)</h3>
+            <div class="controls-list">
+                <strong>Souris :</strong><br>
+                • Placement canons/pièces<br>
+                • Tir au combat<br>
+                <strong>Clavier :</strong><br>
+                • Échap : Terminer le tour
+            </div>
+        </div>
+        
+        <div class="player-controls player2">
+            <h3>⌨️ Joueur 2 (Bleu)</h3>
+            <div class="controls-list">
+                <strong>Flèches directionnelles :</strong><br>
+                • ↑↓←→ : Déplacer pièce<br>
+                • Espace : Placer/Tirer<br>
+                • Entrée : Rotation pièce<br>
+                • Échap : Terminer le tour
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="1400" height="900"></canvas>
+
+    <script type="module">
+        import { GameManager } from './js/game/GameManager.js';
+
+        console.log('🚀 Lancement du test multijoueur...');
+
+        const gameManager = new GameManager();
+        
+        try {
+            await gameManager.init();
+            
+            // Test du mode 2 joueurs
+            gameManager.initTest2Players();
+            
+            // Debug : rendre accessible depuis la console
+            window.gameManager = gameManager;
+            
+            console.log('✅ Test 2 joueurs initialisé !');
+            console.log('📋 Commandes de test :');
+            console.log('  • gameManager.nextPlayer() - Changer de joueur manuellement');
+            console.log('  • gameManager.gameState - État du jeu');
+            console.log('  • gameManager.players - Liste des joueurs');
+            
+        } catch (error) {
+            console.error('❌ Erreur lors de l\'initialisation:', error);
+        }
+    </script>
+</body>
+</html>

@@ -329,7 +329,7 @@ export class UIManager {
                 if (this.elements.player3Controls) this.elements.player3Controls.value = config.player3?.control || 'keyboard_numpad';
                 
                 if (this.elements.player1Active) this.elements.player1Active.checked = config.player1?.active !== false;
-                if (this.elements.player2Active) this.elements.player2Active.checked = config.player2?.active || false;
+                if (this.elements.player2Active) this.elements.player2Active.checked = config.player2?.active !== false;
                 if (this.elements.player3Active) this.elements.player3Active.checked = config.player3?.active || false;
             } catch (error) {
                 console.warn('Failed to load controls configuration:', error);
@@ -344,8 +344,8 @@ export class UIManager {
                 active: this.elements.player1Active?.checked !== false
             },
             player2: {
-                control: this.elements.player2Controls?.value || 'keyboard_wasd',
-                active: this.elements.player2Active?.checked || false
+                control: this.elements.player2Controls?.value || 'keyboard_arrows',
+                active: this.elements.player2Active?.checked !== false
             },
             player3: {
                 control: this.elements.player3Controls?.value || 'keyboard_numpad',
@@ -377,11 +377,11 @@ export class UIManager {
             }
         }
         
-        // Default configuration
+        // Default configuration - Joueur 2 activé par défaut pour le multijoueur
         return {
             player1: { control: 'mouse', active: true },
-            player2: { control: 'keyboard_wasd', active: false },
-            player3: { control: 'keyboard_numpad', active: false }
+            player2: { control: 'keyboard_arrows', active: true },
+            player3: { control: 'keyboard_wasd', active: false }
         };
     }
 

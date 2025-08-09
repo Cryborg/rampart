@@ -1060,7 +1060,89 @@ export class GameManager {
     }
 
     startMultiGame() {
-        console.log('Multi-player not implemented yet');
+        // Lire la configuration des joueurs depuis l'UI
+        const playerConfig = this.uiManager.getPlayerConfiguration();
+        
+        // Compter les joueurs actifs
+        let activePlayers = 1; // Joueur 1 toujours actif
+        if (playerConfig.player2?.active) activePlayers++;
+        if (playerConfig.player3?.active) activePlayers++;
+        
+        console.log(`🎮 Démarrage du jeu multijoueur avec ${activePlayers} joueurs`);
+        
+        // Arrêter la boucle actuelle si elle existe
+        if (this.gameLoop) {
+            cancelAnimationFrame(this.gameLoop);
+        }
+        
+        // Réinitialiser le jeu
+        this.reset();
+        
+        // Initialiser le mode multijoueur avec la config de l'UI
+        this.initializeMultiPlayersFromConfig(playerConfig, activePlayers);
+        
+        // Configurer le niveau multijoueur
+        const gameMode = activePlayers === 2 ? '2players' : '3players';
+        this.setupDefaultLevel(gameMode);
+        
+        // Démarrer le jeu
+        this.startGameLoop();
+        
+        console.log('✅ Jeu multijoueur démarré !');
+    }
+
+    /**
+     * Initialiser les joueurs multiples depuis la configuration UI
+     */
+    initializeMultiPlayersFromConfig(config, playerCount) {
+        this.players = []; // Reset des joueurs
+        this.gameMode = playerCount === 2 ? '2players' : '3players';
+        
+        // Toujours créer le joueur 1
+        const player1 = new Player(1, 'Joueur 1', '#ff6b35', config.player1?.control || 'mouse');
+        this.players.push(player1);
+        
+        // Créer le joueur 2 si actif
+        if (config.player2?.active && playerCount >= 2) {
+            const player2 = new Player(2, 'Joueur 2', '#004e89', config.player2?.control || 'keyboard_arrows');
+            this.players.push(player2);
+        }
+        
+        // Créer le joueur 3 si actif
+        if (config.player3?.active && playerCount >= 3) {
+            const player3 = new Player(3, 'Joueur 3', '#2ecc71', config.player3?.control || 'keyboard_wasd');
+            this.players.push(player3);
+        }
+        
+        this.currentPlayer = 0;
+        
+        // Configurer GameState en mode multijoueur
+        this.gameState.setMultiplayerMode(this.players.length);
+        
+        console.log(`👥 ${this.players.length} joueurs initialisés depuis la configuration UI`);
+        this.players.forEach((player, i) => {
+            console.log(`  Joueur ${i+1}: ${player.name} (${player.controlType})`);
+        });
+    }
+
+    /**
+     * Réinitialiser le jeu pour un nouveau démarrage
+     */
+    reset() {
+        // Arrêter les systèmes existants
+        if (this.waveManager) {
+            this.waveManager.destroy();
+        }
+        if (this.combatSystem) {
+            this.combatSystem.destroy();
+        }
+        
+        // Réinitialiser les variables
+        this.players = [];
+        this.currentPlayer = 0;
+        this.gameState.currentState = 'MENU';
+        
+        console.log('🔄 Jeu réinitialisé');
     }
 
     startGameLoop() {
