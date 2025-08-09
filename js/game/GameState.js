@@ -49,9 +49,8 @@ export class GameState {
         this.previousState = this.currentState;
         this.currentState = newState;
         
-        // Déterminer si la nouvelle phase est séquentielle
-        this.isSequentialPhase = this.isMultiplayer && 
-            (newState === GAME_STATES.PLACE_CANNONS || newState === GAME_STATES.REPAIR);
+        // Dans Rampart, TOUTES les phases sont simultanées !
+        this.isSequentialPhase = false;
         
         // Réinitialiser les tours multijoueurs
         if (this.isSequentialPhase) {

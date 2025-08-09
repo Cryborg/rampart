@@ -474,12 +474,6 @@ export class GameManager {
     }
 
     handleCannonPlacement(gridPos, button) {
-        // Vérifier si le joueur peut agir
-        if (!this.canCurrentPlayerAct()) {
-            console.log(`❌ Ce n'est pas le tour du joueur ${this.currentPlayer + 1}`);
-            return;
-        }
-        
         if (button === 0) { // Left click - placer un canon
             if (this.canPlaceCannonAt(gridPos.x, gridPos.y)) {
                 if (this.grid.placeCannon(gridPos.x, gridPos.y, this.players[this.currentPlayer].id)) {
@@ -499,22 +493,15 @@ export class GameManager {
                     this.cannonsPlacedThisPhase++;
                     console.log(`🎯 Canon ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase} placé dans cette phase`);
                     
-                    // Vérifier si plus de canons à placer pour ce joueur
+                    // Vérifier si plus de canons à placer
                     const cannonsToPlace = this.calculateCannonsToPlace();
                     if (cannonsToPlace <= 0) {
                         console.log(`🎯 Joueur ${this.currentPlayer + 1} a terminé de placer ses canons`);
                         
-                        // En multijoueur, terminer automatiquement le tour
-                        if (this.gameState.isMultiplayer) {
-                            setTimeout(() => {
-                                this.finishPlayerTurn(this.getCurrentPlayer());
-                            }, 500);
-                        } else {
-                            // En solo, transition directe au combat
-                            setTimeout(() => {
-                                this.gameState.transition('COMBAT');
-                            }, 1000);
-                        }
+                        // Transition directe au combat (gameplay Rampart original)
+                        setTimeout(() => {
+                            this.gameState.transition('COMBAT');
+                        }, 1000);
                     }
                 } else {
                     console.log(`❌ Impossible de placer un canon à (${gridPos.x}, ${gridPos.y})`);
@@ -641,12 +628,6 @@ export class GameManager {
     }
 
     handlePiecePlacement(gridPos, button) {
-        // Vérifier si le joueur peut agir
-        if (!this.canCurrentPlayerAct()) {
-            console.log(`❌ Ce n'est pas le tour du joueur ${this.currentPlayer + 1} (REPAIR)`);
-            return;
-        }
-        
         const player = this.players[this.currentPlayer];
         
         if (button === 0) { // Left click - place piece
@@ -1088,6 +1069,9 @@ export class GameManager {
         const gameMode = activePlayers === 2 ? '2players' : '3players';
         this.setupDefaultLevel(gameMode);
         
+        // Reconnecter les callbacks GameState
+        this.setupGameStateCallbacks();
+        
         // Démarrer le jeu
         this.startGameLoop();
         
@@ -1143,9 +1127,49 @@ export class GameManager {
         // Réinitialiser les variables
         this.players = [];
         this.currentPlayer = 0;
+        
+        // Réinitialiser GameState manuellement
         this.gameState.currentState = 'MENU';
+        this.gameState.previousState = null;
+        this.gameState.isTransitioning = false;
         
         console.log('🔄 Jeu réinitialisé');
+    }
+
+    /**
+     * Configurer les callbacks GameState (extrait de startSoloGame)
+     */
+    setupGameStateCallbacks() {
+        // Setup state change callbacks
+        this.gameState.onStateChange((newState, oldState) => {
+            console.log(`🔄 State: ${oldState} → ${newState}`);
+            
+            if (oldState === 'REPAIR') {
+                this.clearRepairTimer();
+            }
+            
+            if (newState === 'REPAIR') {
+                this.startRepairPhase();
+                this.renderer.setCursorVisibility(false);
+            }
+            
+            if (newState === 'COMBAT') {
+                this.startCombatPhase();
+                this.renderer.setCursorVisibility(true);
+            }
+            
+            if (newState === 'PLACE_CANNONS') {
+                this.startCannonPlacementPhase();
+                this.renderer.setCursorVisibility(false);
+            }
+        });
+
+        // Setup callback for player turn changes (même si pas utilisé en simultané)
+        this.gameState.onPlayerTurnChange((currentPlayer, previousPlayer) => {
+            console.log(`👥 Tour: Joueur ${previousPlayer + 1} → Joueur ${currentPlayer + 1}`);
+            this.currentPlayer = currentPlayer;
+            this.onPlayerChanged?.(currentPlayer, previousPlayer);
+        });
     }
 
     startGameLoop() {
@@ -1269,7 +1293,7 @@ export class GameManager {
         // Rendre l'interface multijoueur si plusieurs joueurs
         if (this.players.length > 1) {
             this.renderer.renderMultiPlayerStats(this.players, this.currentPlayer, this.gameState);
-            this.renderer.renderCurrentPlayerIndicator(this.currentPlayer, this.players);
+            // Pas d'indicateur de tour - gameplay simultané !
         }
         
         // Rendre les systèmes de combat
