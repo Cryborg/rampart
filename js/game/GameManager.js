@@ -26,9 +26,7 @@ export class GameManager {
         this.pieceGenerator = new PieceGenerator(true);
         this.currentHoverPos = null;
         
-        // Compteur pour la phase actuelle de placement de canons
-        this.cannonsPlacedThisPhase = 0;
-        this.maxCannonsThisPhase = 0;
+        // Note: Les compteurs de canons sont maintenant calculés par joueur individuellement
         
         // Systèmes de combat et ennemis
         this.combatSystem = null;
@@ -326,8 +324,8 @@ export class GameManager {
             
             console.log(`🎯 Joueur ${player.id} tente de placer canon à (${cursorX}, ${cursorY})`);
             
-            // Vérifier si on peut placer le canon
-            if (this.canPlaceCannonAt(cursorX, cursorY)) {
+            // Vérifier si on peut placer le canon pour ce joueur
+            if (this.canPlaceCannonAt(cursorX, cursorY, player.id)) {
                 // Placer le canon sur la grille
                 if (this.grid.placeCannon(cursorX, cursorY, player.id)) {
                     console.log(`✅ Canon placé pour Joueur ${player.id} à (${cursorX}, ${cursorY})`);
@@ -342,10 +340,7 @@ export class GameManager {
                     player.cannons.push(newCannon);
                     player.stats.cannonsPlaced++;
                     
-                    // Incrémenter le compteur de canons placés cette phase
-                    this.cannonsPlacedThisPhase++;
-                    
-                    console.log(`🔢 Canons placés cette phase: ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase}`);
+                    console.log(`Canon place pour Joueur ${player.id} (${player.cannons.length} total)`);
                 } else {
                     console.log(`❌ Impossible de placer le canon à (${cursorX}, ${cursorY})`);
                 }
@@ -521,8 +516,9 @@ export class GameManager {
 
     handleCannonPlacement(gridPos, button) {
         if (button === 0) { // Left click - placer un canon
-            if (this.canPlaceCannonAt(gridPos.x, gridPos.y)) {
-                if (this.grid.placeCannon(gridPos.x, gridPos.y, this.players[this.currentPlayer].id)) {
+            const currentPlayerId = this.players[this.currentPlayer].id;
+            if (this.canPlaceCannonAt(gridPos.x, gridPos.y, currentPlayerId)) {
+                if (this.grid.placeCannon(gridPos.x, gridPos.y, currentPlayerId)) {
                     console.log(`🎯 Canon placé à (${gridPos.x}, ${gridPos.y})`);
                     
                     // Ajouter à la liste des canons du joueur
@@ -535,9 +531,8 @@ export class GameManager {
                     this.players[this.currentPlayer].cannons.push(newCannon);
                     console.log(`🎯 Canon ajouté à la liste du joueur ${this.currentPlayer}: (${gridPos.x}, ${gridPos.y}). Total: ${this.players[this.currentPlayer].cannons.length}`);
                     
-                    // Incrémenter le compteur de cette phase
-                    this.cannonsPlacedThisPhase++;
-                    console.log(`🎯 Canon ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase} placé dans cette phase`);
+                    const currentPlayer = this.players[this.currentPlayer];
+                    console.log(`Canon place par souris pour Joueur ${currentPlayer.id} (${currentPlayer.cannons.length} total)`);
                     
                     // Vérifier si plus de canons à placer
                     const cannonsToPlace = this.calculateCannonsToPlace();
@@ -560,14 +555,14 @@ export class GameManager {
         }
     }
 
-    canPlaceCannonAt(x, y) {
+    canPlaceCannonAt(x, y, playerId = null) {
         // Validation des coordonnées dans les limites de la grille
         if (x < 0 || y < 0 || x >= GAME_CONFIG.GRID_WIDTH - 1 || y >= GAME_CONFIG.GRID_HEIGHT - 1) {
             return false;
         }
         
-        // Vérifier s'il reste des canons à placer
-        const cannonsToPlace = this.calculateCannonsToPlace();
+        // Vérifier s'il reste des canons à placer pour ce joueur
+        const cannonsToPlace = this.calculateCannonsToPlace(playerId);
         if (cannonsToPlace <= 0) {
             return false;
         }
@@ -591,22 +586,34 @@ export class GameManager {
         return this.grid.canPlaceCannon(x, y, this.players[this.currentPlayer].id);
     }
 
-    calculateCannonsToPlace() {
-        // Retourner combien il reste à placer dans cette phase
-        return Math.max(0, this.maxCannonsThisPhase - this.cannonsPlacedThisPhase);
+    calculateCannonsToPlace(playerId = null) {
+        // Calcul spécifique par joueur pour le multijoueur
+        const targetPlayerId = playerId || this.players[this.currentPlayer].id;
+        const player = this.players.find(p => p.id === targetPlayerId);
+        
+        if (!player) return 0;
+        
+        // Max canons autorisés pour ce joueur
+        const maxCannons = this.calculateMaxCannonsForPhase(targetPlayerId);
+        
+        // Canons actuels de ce joueur
+        const currentCannons = player.cannons.length;
+        
+        // Canons restants à placer
+        return Math.max(0, maxCannons - currentCannons);
     }
     
-    calculateMaxCannonsForPhase() {
-        // Compter SEULEMENT les cases dorées LIBRES du JOUEUR ACTUEL
-        const currentPlayerId = this.players[this.currentPlayer].id;
+    calculateMaxCannonsForPhase(playerId = null) {
+        // Compter SEULEMENT les cases dorées LIBRES du JOUEUR SPECIFIE
+        const targetPlayerId = playerId || this.players[this.currentPlayer].id;
         let freeGoldenCells = 0;
         
         for (let y = 0; y < this.grid.height; y++) {
             for (let x = 0; x < this.grid.width; x++) {
                 const cell = this.grid.getCell(x, y);
-                // Case dorée ET libre (pas un canon) ET appartenant au joueur actuel
+                // Case dorée ET libre (pas un canon) ET appartenant au joueur cible
                 if (cell && cell.cannonZone && cell.type === 'land' && 
-                    cell.cannonZoneOwnerId === currentPlayerId) {
+                    cell.cannonZoneOwnerId === targetPlayerId) {
                     freeGoldenCells++;
                 }
             }
@@ -615,7 +622,7 @@ export class GameManager {
         // Formule Rampart : floor(40% * (cases_dorées_libres / 4))
         const maxCannons = Math.floor(GAME_CONFIG.GAMEPLAY.CANNON_RATIO * (freeGoldenCells / 4));
         
-        console.log(`🎯 Cases dorées libres (Joueur ${currentPlayerId}): ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
+        console.log(`Cases dorees libres (Joueur ${targetPlayerId}): ${freeGoldenCells}, Max canons cette phase: ${maxCannons}`);
         return Math.max(GAME_CONFIG.GAMEPLAY.MIN_CANNONS, maxCannons);
     }
 
@@ -666,9 +673,7 @@ export class GameManager {
                 // Supprimer de la liste du joueur
                 player.cannons.splice(i, 1);
                 
-                // Décrémenter le compteur de cette phase
-                this.cannonsPlacedThisPhase = Math.max(0, this.cannonsPlacedThisPhase - 1);
-                console.log(`🗑️ Canon supprimé à (${cannon.x}, ${cannon.y}) - ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase}`);
+                console.log(`Canon supprime a (${cannon.x}, ${cannon.y}) par Joueur ${playerId}`);
                 return;
             }
         }
@@ -1010,9 +1015,7 @@ export class GameManager {
         
         // Le cleanup des canons se fait maintenant à la fin du combat et à chaque pose de pièce
         
-        // Réinitialiser le compteur de cette phase
-        this.cannonsPlacedThisPhase = 0;
-        this.maxCannonsThisPhase = this.calculateMaxCannonsForPhase();
+        // Note: Les compteurs sont maintenant par joueur, plus de variable globale
         
         const currentCannons = player.cannons.length;
         
@@ -1531,11 +1534,13 @@ export class GameManager {
     }
 
     renderCannonPreview(gridPos) {
-        // Calculer le nombre de canons restants pour cette phase
-        const cannonsLeft = this.maxCannonsThisPhase - this.cannonsPlacedThisPhase;
+        // Calculer le nombre de canons restants pour le joueur actuel
+        const currentPlayerId = this.players[this.currentPlayer].id;
+        const cannonsLeft = this.calculateCannonsToPlace(currentPlayerId);
         
         // Déléguer au renderer pour utiliser le bon contexte et les bons offsets
-        this.renderer.renderCannonPreview(gridPos, (x, y) => this.canPlaceCannonAt(x, y), cannonsLeft);
+        const currentPlayerId = this.players[this.currentPlayer].id;
+        this.renderer.renderCannonPreview(gridPos, (x, y) => this.canPlaceCannonAt(x, y, currentPlayerId), cannonsLeft);
     }
 
     clearRepairTimer() {
