@@ -162,7 +162,6 @@ export class UIManager {
             this.hideGameOver();
             this.showMenu();
         });
-        }
     }
 
     setupInitialState() {
