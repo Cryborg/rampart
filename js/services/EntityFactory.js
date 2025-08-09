@@ -104,7 +104,9 @@ export class EntityFactory {
             case 'infantry': return this.createInfantry(x, y);
             case 'tank': return this.createTank(x, y);
             default:
-                console.warn(`Type d'unité terrestre inconnu: ${type}`);\n                return this.createInfantry(x, y);\n        }
+                console.warn(`Type d'unité terrestre inconnu: ${type}`);
+                return this.createInfantry(x, y);
+        }
     }
     
     // ===================================================
@@ -134,7 +136,8 @@ export class EntityFactory {
             case 'heavy': return this.createHeavyShip(x, y);
             case 'artillery': return this.createArtilleryShip(x, y);
             default:
-                console.warn(`Type de navire inconnu: ${type}`);\n                return this.createBasicShip(x, y);
+                console.warn(`Type de navire inconnu: ${type}`);
+                return this.createBasicShip(x, y);
         }
     }
     
@@ -219,6 +222,7 @@ export class EntityFactory {
                 break;
         }
         
-        console.warn(`Type d'entité inconnu: ${type}/${subType}`);\n        return null;
+        console.warn(`Type d'entité inconnu: ${type}/${subType}`);
+        return null;
     }
 }
