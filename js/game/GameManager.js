@@ -1061,7 +1061,7 @@ export class GameManager {
 
     startMultiGame() {
         // Lire la configuration des joueurs depuis l'UI
-        const playerConfig = this.uiManager.getPlayerConfiguration();
+        const playerConfig = this.uiManager.getControlsConfiguration();
         
         // Compter les joueurs actifs
         let activePlayers = 1; // Joueur 1 toujours actif
