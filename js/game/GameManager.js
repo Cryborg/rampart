@@ -311,6 +311,7 @@ export class GameManager {
             case 'right':
                 player.piecePosition.x = Math.min(this.grid.width - 1, player.piecePosition.x + moveAmount);
                 break;
+            }
         }
     }
 
