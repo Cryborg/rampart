@@ -1060,6 +1060,9 @@ export class GameManager {
     }
 
     startMultiGame() {
+        // Fermer le menu
+        this.uiManager.hideMenu();
+        
         // Lire la configuration des joueurs depuis l'UI
         const playerConfig = this.uiManager.getControlsConfiguration();
         
