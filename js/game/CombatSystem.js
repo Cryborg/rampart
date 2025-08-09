@@ -594,7 +594,12 @@ export class CombatSystem {
     destroy() {
         this.projectiles.length = 0;
         this.cannonCooldowns.clear();
-        this.stopAiming();
+        
+        // Réinitialiser les états de visée
+        this.aimingMode = false;
+        this.selectedCannon = null;
+        this.crosshairPos = null;
+        
         console.log('⚔️ CombatSystem détruit');
     }
 }
