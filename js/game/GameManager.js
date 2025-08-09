@@ -1539,7 +1539,6 @@ export class GameManager {
         const cannonsLeft = this.calculateCannonsToPlace(currentPlayerId);
         
         // Déléguer au renderer pour utiliser le bon contexte et les bons offsets
-        const currentPlayerId = this.players[this.currentPlayer].id;
         this.renderer.renderCannonPreview(gridPos, (x, y) => this.canPlaceCannonAt(x, y, currentPlayerId), cannonsLeft);
     }
 
