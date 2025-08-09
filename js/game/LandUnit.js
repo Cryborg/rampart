@@ -28,15 +28,19 @@ export class LandUnit {
         this.isMoving = false;
         
         // IA
-        this.aiState = 'seeking'; // seeking, attacking, blocking
+        this.aiState = 'seeking'; // seeking, attacking, blocking, attacking_structure
         this.searchRadius = 20; // Rayon de recherche de cibles
         this.lastTargetSearch = 0;
         this.targetSearchInterval = 3000; // Rechercher cible toutes les 3s
         
+        // Combat
+        this.attackCooldown = 2000; // 2 secondes entre attaques
+        this.lastAttack = 0;
+        this.attackRange = 1.5; // Portée d'attaque
+        
         // Visuel
         this.color = this.getUnitColor();
         
-        console.log(`🏃 Unité terrestre ${this.type} créée à (${x}, ${y})`);
     }
 
     getUnitColor() {
@@ -74,7 +78,13 @@ export class LandUnit {
             case 'blocking':
                 this.blockingBehavior(gameManager);
                 break;
+            case 'attacking_structure':
+                this.attackStructureBehavior(gameManager);
+                break;
         }
+        
+        // Vérifier si on est bloqué par une structure et doit l'attaquer
+        this.checkForStructureBlocking(gameManager);
     }
 
     seekTarget(gameManager) {
@@ -101,7 +111,6 @@ export class LandUnit {
             this.target = closestCastle;
             this.calculatePathTo(closestCastle.x, closestCastle.y, gameManager.grid);
             this.aiState = 'attacking';
-            console.log(`🎯 Unité terrestre trouve cible à (${closestCastle.x}, ${closestCastle.y})`);
         } else {
             // Se diriger vers le centre de la carte
             const centerX = Math.floor(gameManager.grid.width * 0.4);
@@ -161,15 +170,140 @@ export class LandUnit {
         }
     }
 
+    /**
+     * Vérifier si l'unité est bloquée par une structure et doit l'attaquer
+     */
+    checkForStructureBlocking(gameManager) {
+        if (this.aiState === 'attacking_structure') return; // Déjà en train d'attaquer
+        if (!this.isMoving || this.path.length === 0) return; // Pas en mouvement
+        
+        // Vérifier s'il y a une structure bloquante devant nous
+        const currentTarget = this.path[this.pathIndex];
+        if (!currentTarget) return;
+        
+        const distance = Math.sqrt(
+            (this.x - currentTarget.x) ** 2 + 
+            (this.y - currentTarget.y) ** 2
+        );
+        
+        // Si on est très proche de notre prochaine position mais ne peut pas y aller
+        if (distance < 0.3 && !this.canMoveTo(Math.floor(currentTarget.x), Math.floor(currentTarget.y), gameManager.grid)) {
+            // Il y a probablement une structure qui bloque
+            const blockingStructure = this.findBlockingStructure(currentTarget.x, currentTarget.y, gameManager.grid);
+            if (blockingStructure) {
+                this.startAttackingStructure(blockingStructure);
+            }
+        }
+    }
+
+    findBlockingStructure(x, y, grid) {
+        const cellX = Math.floor(x);
+        const cellY = Math.floor(y);
+        const cell = grid.getCell(cellX, cellY);
+        
+        if (cell && (cell.type === 'wall' || cell.type === 'cannon' || cell.type === 'castle-core')) {
+            return { x: cellX, y: cellY, type: cell.type };
+        }
+        return null;
+    }
+
+    startAttackingStructure(structure) {
+        this.targetStructure = structure;
+        this.aiState = 'attacking_structure';
+        this.path = []; // Arrêter le mouvement
+        this.isMoving = false;
+        console.log(`⚔️ ${this.type} commence à attaquer ${structure.type} à (${structure.x}, ${structure.y})`);
+    }
+
+    /**
+     * Comportement d'attaque de structures
+     */
+    attackStructureBehavior(gameManager) {
+        if (!this.targetStructure) {
+            this.aiState = 'seeking';
+            return;
+        }
+
+        const distance = Math.sqrt(
+            (this.x - this.targetStructure.x) ** 2 + 
+            (this.y - this.targetStructure.y) ** 2
+        );
+
+        if (distance > this.attackRange) {
+            // Se rapprocher de la structure
+            this.calculatePathTo(this.targetStructure.x, this.targetStructure.y, gameManager.grid);
+            return;
+        }
+
+        // Vérifier si on peut attaquer
+        const now = Date.now();
+        if (now - this.lastAttack < this.attackCooldown) return;
+
+        // Vérifier si la structure existe encore
+        const cell = gameManager.grid.getCell(this.targetStructure.x, this.targetStructure.y);
+        if (!cell || cell.type === 'destroyed' || cell.type === 'land') {
+            // Structure détruite, reprendre le mouvement normal
+            this.targetStructure = null;
+            this.aiState = 'seeking';
+            console.log(`✅ ${this.type} a détruit la structure, reprend sa route`);
+            return;
+        }
+
+        // Attaquer selon le type d'unité et de structure
+        this.performAttack(gameManager);
+    }
+
+    performAttack(gameManager) {
+        const structure = this.targetStructure;
+        const cell = gameManager.grid.getCell(structure.x, structure.y);
+        
+        // Règles d'attaque selon le type
+        let canAttack = false;
+        let attackDamage = this.damage;
+        
+        if (this.type === 'infantry') {
+            // Infanterie ne peut attaquer que les canons
+            canAttack = (structure.type === 'cannon');
+        } else if (this.type === 'tank') {
+            // Tanks peuvent attaquer murs ET canons
+            canAttack = (structure.type === 'wall' || structure.type === 'cannon');
+        }
+        
+        if (!canAttack) {
+            console.log(`❌ ${this.type} ne peut pas attaquer ${structure.type}`);
+            // Si on ne peut pas attaquer cette structure, chercher un autre chemin
+            this.targetStructure = null;
+            this.aiState = 'seeking';
+            return;
+        }
+
+        // Effectuer l'attaque
+        console.log(`⚔️ ${this.type} attaque ${structure.type} à (${structure.x}, ${structure.y}) pour ${attackDamage} dégâts`);
+        
+        // Appliquer les dégâts via le système de combat
+        if (gameManager.combatSystem) {
+            gameManager.combatSystem.damageCellAt(structure.x, structure.y, attackDamage);
+        } else {
+            // Fallback si pas de système de combat
+            cell.health -= attackDamage;
+            if (cell.health <= 0) {
+                gameManager.grid.setCellType(structure.x, structure.y, 'destroyed');
+            }
+        }
+        
+        this.lastAttack = Date.now();
+        
+        // Animation d'attaque visuelle
+        this.isAttacking = true;
+        setTimeout(() => { this.isAttacking = false; }, 300);
+    }
+
     calculatePathTo(targetX, targetY, grid) {
         // Pathfinding simple pour unités terrestres
         this.path = this.findLandPath(this.x, this.y, targetX, targetY, grid);
         this.pathIndex = 0;
         this.isMoving = this.path.length > 0;
         
-        if (this.path.length > 0) {
-            console.log(`🗺️ Chemin terrestre calculé vers (${targetX}, ${targetY}) - ${this.path.length} étapes`);
-        }
     }
 
     findLandPath(startX, startY, endX, endY, grid) {
@@ -233,6 +367,7 @@ export class LandUnit {
         if (!cell) return false;
         
         // Les unités terrestres peuvent se déplacer sur la terre et les zones détruites
+        // Elles NE PEUVENT PLUS traverser les murs, canons, ou cores de château
         return cell.type === 'land' || cell.type === 'destroyed';
     }
 
@@ -254,7 +389,6 @@ export class LandUnit {
                 this.path = [];
                 this.pathIndex = 0;
                 this.isMoving = false;
-                console.log('🏃 Unité terrestre arrivée à destination');
                 return;
             }
             return;
@@ -317,7 +451,6 @@ export class LandUnit {
 
     takeDamage(damage) {
         this.health -= damage;
-        console.log(`🏃 Unité terrestre endommagée: ${this.health}/${this.maxHealth} HP`);
         
         if (this.health <= 0) {
             this.destroy();
@@ -329,7 +462,6 @@ export class LandUnit {
 
     destroy() {
         this.active = false;
-        console.log(`💀 Unité terrestre ${this.type} détruite à (${this.x.toFixed(1)}, ${this.y.toFixed(1)})`);
     }
 
     render(ctx, renderer) {
@@ -355,6 +487,28 @@ export class LandUnit {
             ctx.beginPath();
             ctx.arc(0, 0, unitSize/2, 0, Math.PI * 2);
             ctx.fill();
+        }
+        
+        // Indicateur d'attaque
+        if (this.isAttacking) {
+            ctx.strokeStyle = '#ff4444';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, unitSize * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        // Indicateur d'état
+        if (this.aiState === 'attacking_structure') {
+            // Petite croix rouge pour indiquer l'attaque
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-unitSize * 0.3, -unitSize * 0.3);
+            ctx.lineTo(unitSize * 0.3, unitSize * 0.3);
+            ctx.moveTo(unitSize * 0.3, -unitSize * 0.3);
+            ctx.lineTo(-unitSize * 0.3, unitSize * 0.3);
+            ctx.stroke();
         }
         
         ctx.restore();

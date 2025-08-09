@@ -478,7 +478,7 @@ export class Grid {
         return x >= 0 && x < this.width && y >= 0 && y < this.height;
     }
 
-    canPlacePiece(piece, startX, startY) {
+    canPlacePiece(piece, startX, startY, gameManager = null) {
         if (!piece || !piece.shape) return false;
 
         for (let py = 0; py < piece.shape.length; py++) {
@@ -495,10 +495,46 @@ export class Grid {
                     if (!cell || !cell.isBuildable()) {
                         return false;
                     }
+                    
+                    // Vérifier si des unités terrestres bloquent le placement
+                    if (gameManager && this.isBlockedByLandUnits(worldX, worldY, gameManager)) {
+                        return false;
+                    }
                 }
             }
         }
         return true;
+    }
+
+    /**
+     * Vérifie si une position est bloquée par des unités terrestres
+     */
+    isBlockedByLandUnits(x, y, gameManager) {
+        const waveManager = gameManager.waveManager;
+        if (!waveManager || !waveManager.landUnits) return false;
+
+        // Vérifier chaque unité terrestre
+        for (let unit of waveManager.landUnits) {
+            if (!unit.active) continue;
+            
+            // Utiliser la méthode blocksPlacement de l'unité si elle existe
+            if (unit.blocksPlacement && typeof unit.blocksPlacement === 'function') {
+                if (unit.blocksPlacement(x, y, 1, 1)) {
+                    console.log(`🚫 Placement bloqué par unité ${unit.type} à (${unit.x.toFixed(1)}, ${unit.y.toFixed(1)})`);
+                    return true;
+                }
+            } else {
+                // Vérification basique par distance
+                const unitRadius = unit.size / 2;
+                const distance = Math.sqrt((unit.x - x) ** 2 + (unit.y - y) ** 2);
+                if (distance <= unitRadius) {
+                    console.log(`🚫 Placement bloqué par unité ${unit.type} (distance: ${distance.toFixed(1)})`);
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     placePiece(piece, startX, startY, playerId = null) {

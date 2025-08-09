@@ -152,6 +152,9 @@ export class CombatSystem {
                 if (distance > 0.5) {
                     this.damageEnemyShipsAt(x, y, actualDamage);
                 }
+
+                // Vérifier s'il y a des unités terrestres dans la zone d'explosion
+                this.damageLandUnitsAt(x, y, actualDamage);
             }
         }
     }
@@ -179,6 +182,39 @@ export class CombatSystem {
             }
         }
         return shipHit;
+    }
+
+    /**
+     * Endommager les unités terrestres à une position donnée
+     */
+    damageLandUnitsAt(x, y, damage) {
+        const waveManager = this.gameManager.waveManager;
+        if (!waveManager || !waveManager.landUnits) return false;
+
+        let unitHit = false;
+        for (let unit of waveManager.landUnits) {
+            if (!unit.active) continue;
+            
+            // Vérifier si l'unité est dans cette zone (avec sa taille)
+            const unitRadius = unit.size / 2;
+            const distance = getDistance(unit.x, unit.y, x, y);
+            
+            if (distance <= unitRadius) {
+                console.log(`🎯 Unité terrestre touchée ! Type: ${unit.type}, Distance: ${distance.toFixed(1)}`);
+                
+                // Utiliser la méthode takeDamage si elle existe, sinon appliquer directement
+                if (unit.takeDamage && typeof unit.takeDamage === 'function') {
+                    unit.takeDamage(damage);
+                } else {
+                    unit.health -= damage;
+                    if (unit.health <= 0) {
+                        unit.destroy();
+                    }
+                }
+                unitHit = true;
+            }
+        }
+        return unitHit;
     }
 
     /**

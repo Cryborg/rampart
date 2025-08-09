@@ -156,13 +156,8 @@ export class EnemyShip {
         // Vérifier si on est proche du rivage pour débarquer
         const shoreDistance = this.getDistanceToShore(gameManager.grid);
         
-        // DEBUG: Logging pour diagnostiquer le débarquement
-        if (Math.random() < 0.01) { // Log 1% du temps pour éviter le spam
-            console.log(`🚢 Bateau (${this.x.toFixed(1)}, ${this.y.toFixed(1)}) - Distance rivage: ${shoreDistance.toFixed(1)}, hasLanded: ${this.hasLanded}, aiState: ${this.aiState}`);
-        }
         
         if (shoreDistance <= 1.5 && !this.hasLanded) {
-            console.log(`🏖️ DÉBARQUEMENT DÉCLENCHÉ ! Bateau à ${shoreDistance.toFixed(1)} du rivage`);
             this.attemptLanding(gameManager);
             return;
         }
@@ -369,23 +364,14 @@ export class EnemyShip {
     }
 
     attemptLanding(gameManager) {
-        console.log(`🌊 TENTATIVE DE DÉBARQUEMENT - Bateau (${this.x.toFixed(1)}, ${this.y.toFixed(1)})`);
         const now = Date.now();
         
         // Cooldown entre débarquements (éviter le spam)
-        if (now - this.lastLandingTime < 5000) {
-            console.log(`⏰ Cooldown actif, dernier débarquement: ${((now - this.lastLandingTime)/1000).toFixed(1)}s`);
-            return;
-        }
+        if (now - this.lastLandingTime < 5000) return;
         
         // Trouver le point de débarquement le plus proche
         const landingPoint = this.findLandingPoint(gameManager.grid);
-        console.log(`🏔️ Point de débarquement trouvé:`, landingPoint);
-        
-        if (!landingPoint) {
-            console.log('⚠️ Pas de point de débarquement trouvé');
-            return;
-        }
+        if (!landingPoint) return;
         
         // Créer les troupes selon le type de bateau
         this.deployTroops(landingPoint, gameManager);
@@ -418,17 +404,12 @@ export class EnemyShip {
     }
 
     deployTroops(landingPoint, gameManager) {
-        console.log(`🪖 DÉPLOIEMENT DES TROUPES au point (${landingPoint.x}, ${landingPoint.y})`);
         const waveManager = gameManager.waveManager;
-        if (!waveManager) {
-            console.log(`⚠️ Erreur: WaveManager non disponible`);
-            return;
-        }
+        if (!waveManager) return;
         
         // Initialiser le tableau des unités terrestres si nécessaire
         if (!waveManager.landUnits) {
             waveManager.landUnits = [];
-            console.log(`📋 Initialisation du tableau landUnits`);
         }
         
         // Nombre de troupes selon le type de bateau
@@ -454,9 +435,8 @@ export class EnemyShip {
                 break;
         }
         
-        console.log(`🪖 Création de ${troopCount} unités terrestres (type: ${this.type}, tankChance: ${tankChance})`);
-        
         // Créer les troupes
+        console.log(`🪖 ${troopCount} unités terrestres débarquent !`);
         for (let i = 0; i < troopCount; i++) {
             // Position de débarquement avec légère variation
             const troopX = landingPoint.x + (Math.random() - 0.5) * 2;

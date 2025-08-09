@@ -368,7 +368,7 @@ export class GameManager {
                 const pieceX = player.piecePosition.x;
                 const pieceY = player.piecePosition.y;
                 
-                if (this.grid.canPlacePiece(player.currentPiece, pieceX, pieceY)) {
+                if (this.grid.canPlacePiece(player.currentPiece, pieceX, pieceY, this)) {
                     this.grid.placePiece(player.currentPiece, pieceX, pieceY, player.id);
                     player.stats.piecesPlaced++;
                     
