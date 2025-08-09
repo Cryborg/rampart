@@ -26,6 +26,9 @@ export class Player {
         this.currentPiece = null;
         this.piecePosition = { x: this.territory.startX + 5, y: this.territory.startY + 5 };
         
+        // Position du curseur pour les contrôles clavier
+        this.cursorPosition = { x: this.territory.startX + 5, y: this.territory.startY + 5 };
+        
         this.stats = {
             shipsDestroyed: 0,
             cannonsPlaced: 0,

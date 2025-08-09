@@ -355,6 +355,70 @@ export class Renderer {
             const pieceColor = player.currentPiece.color || player.color;
             this.renderPiecePreview(player.currentPiece, player.piecePosition.x, player.piecePosition.y, pieceColor);
         }
+        
+        // Render cursor for keyboard players during cannon placement
+        if (player.controlType !== 'mouse' && player.cursorPosition && 
+            this.gameManager && this.gameManager.gameState.currentState === 'PLACE_CANNONS') {
+            this.renderPlayerCursor(player);
+        }
+    }
+    
+    /**
+     * Rendre le curseur pour les joueurs au clavier
+     */
+    renderPlayerCursor(player) {
+        const screenPos = this.gridToScreen(player.cursorPosition.x, player.cursorPosition.y);
+        
+        this.ctx.save();
+        
+        // Vérifier si la position est valide pour placer un canon
+        const isValidPosition = this.gameManager?.canPlaceCannonAt?.(player.cursorPosition.x, player.cursorPosition.y);
+        
+        // Couleur du curseur selon la validité
+        const cursorColor = isValidPosition ? '#00ff00' : '#ff0000'; // Vert si valide, rouge sinon
+        
+        // Bordure clignotante du curseur (2x2 pour canon)
+        const time = Date.now();
+        const alpha = 0.5 + 0.3 * Math.sin(time * 0.005); // Clignotement
+        
+        this.ctx.strokeStyle = cursorColor;
+        this.ctx.globalAlpha = alpha;
+        this.ctx.lineWidth = 3;
+        this.ctx.setLineDash([5, 5]);
+        
+        // Rectangle 2x2 pour le canon
+        this.ctx.strokeRect(
+            screenPos.x - 1, 
+            screenPos.y - 1, 
+            this.cellSize * 2 + 2, 
+            this.cellSize * 2 + 2
+        );
+        
+        this.ctx.setLineDash([]);
+        
+        // Afficher les coordonnées et le joueur
+        this.ctx.globalAlpha = 1;
+        this.ctx.fillStyle = player.color;
+        this.ctx.font = 'bold 12px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(
+            `J${player.id}`, 
+            screenPos.x + this.cellSize, 
+            screenPos.y - 8
+        );
+        
+        // Instructions de contrôle
+        if (isValidPosition) {
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = '10px Arial';
+            this.ctx.fillText(
+                `${player.controlScheme?.keys?.action || 'SPACE'} pour placer`, 
+                screenPos.x + this.cellSize, 
+                screenPos.y + this.cellSize * 2 + 15
+            );
+        }
+        
+        this.ctx.restore();
     }
 
     renderCannonWithEffects(cannon) {

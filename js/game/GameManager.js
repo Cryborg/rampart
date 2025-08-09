@@ -275,16 +275,33 @@ export class GameManager {
     }
 
     /**
-     * Gérer le mouvement d'un joueur (pour les pièces en mode REPAIR)
+     * Gérer le mouvement d'un joueur (curseur ou pièces)
      */
     handlePlayerMovement(player, direction) {
-        if (this.gameState.currentState !== 'REPAIR' || !player.currentPiece) return;
-        
         const moveAmount = 1;
-        switch (direction) {
-            case 'up':
-                player.piecePosition.y = Math.max(0, player.piecePosition.y - moveAmount);
-                break;
+        
+        if (this.gameState.currentState === 'PLACE_CANNONS') {
+            // Déplacer le curseur pour placement canons
+            switch (direction) {
+                case 'up':
+                    player.cursorPosition.y = Math.max(0, player.cursorPosition.y - moveAmount);
+                    break;
+                case 'down':
+                    player.cursorPosition.y = Math.min(this.grid.height - 2, player.cursorPosition.y + moveAmount); // -2 pour canon 2x2
+                    break;
+                case 'left':
+                    player.cursorPosition.x = Math.max(0, player.cursorPosition.x - moveAmount);
+                    break;
+                case 'right':
+                    player.cursorPosition.x = Math.min(this.grid.width - 2, player.cursorPosition.x + moveAmount); // -2 pour canon 2x2
+                    break;
+            }
+        } else if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
+            // Déplacer la pièce en mode réparation
+            switch (direction) {
+                case 'up':
+                    player.piecePosition.y = Math.max(0, player.piecePosition.y - moveAmount);
+                    break;
             case 'down':
                 player.piecePosition.y = Math.min(this.grid.height - 1, player.piecePosition.y + moveAmount);
                 break;
@@ -302,8 +319,38 @@ export class GameManager {
      */
     handlePlayerAction(player) {
         if (this.gameState.currentState === 'PLACE_CANNONS') {
-            // Placer un canon à la position actuelle
-            // TODO: Implémenter placement canon au clavier
+            // Placer un canon à la position du curseur (contrôles clavier)
+            const cursorX = player.cursorPosition.x;
+            const cursorY = player.cursorPosition.y;
+            
+            console.log(`🎯 Joueur ${player.id} tente de placer canon à (${cursorX}, ${cursorY})`);
+            
+            // Vérifier si on peut placer le canon
+            if (this.canPlaceCannonAt(cursorX, cursorY)) {
+                // Placer le canon sur la grille
+                if (this.grid.placeCannon(cursorX, cursorY, player.id)) {
+                    console.log(`✅ Canon placé pour Joueur ${player.id} à (${cursorX}, ${cursorY})`);
+                    
+                    // Ajouter à la liste des canons du joueur
+                    const newCannon = {
+                        x: cursorX,
+                        y: cursorY,
+                        firing: false,
+                        canFire: true
+                    };
+                    player.cannons.push(newCannon);
+                    player.stats.cannonsPlaced++;
+                    
+                    // Incrémenter le compteur de canons placés cette phase
+                    this.cannonsPlacedThisPhase++;
+                    
+                    console.log(`🔢 Canons placés cette phase: ${this.cannonsPlacedThisPhase}/${this.maxCannonsThisPhase}`);
+                } else {
+                    console.log(`❌ Impossible de placer le canon à (${cursorX}, ${cursorY})`);
+                }
+            } else {
+                console.log(`❌ Position invalide pour canon: (${cursorX}, ${cursorY})`);
+            }
         } else if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
             // Placer la pièce actuelle
             const pieceX = player.piecePosition.x;
@@ -991,8 +1038,14 @@ export class GameManager {
                 player.cannons.map(c => `(${c.x},${c.y})`).join(', '));
         });
         
-        if (this.waveManager) {
-            // Démarrer une nouvelle vague d'ennemis
+        // En mode multijoueur, pas d'ennemis IA - combat entre joueurs seulement
+        if (this.players.length > 1) {
+            console.log('👥 Mode multijoueur: Pas d'ennemis IA - Combat entre joueurs uniquement');
+            // Combat simultané entre joueurs - pas de vague d'ennemis
+            // La phase se termine automatiquement par le timer
+        } else if (this.waveManager) {
+            // Mode solo: démarrer une nouvelle vague d'ennemis
+            console.log('🤖 Mode solo: Démarrage vague d'ennemis');
             this.waveManager.startWave();
         } else {
             console.warn('⚠️ WaveManager non initialisé, combat simulé');
