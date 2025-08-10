@@ -11,7 +11,7 @@ export const GAME_STATES = {
 export const PHASE_DURATIONS = {
     [GAME_STATES.SELECT_TERRITORY]: 10000, // 10 seconds
     [GAME_STATES.PLACE_CANNONS]: 15000,    // 15 seconds
-    [GAME_STATES.COMBAT]: 30000,           // 30 seconds
+    [GAME_STATES.COMBAT]: 15000,           // 15 seconds
     [GAME_STATES.REPAIR]: 15000,           // 15 seconds
     [GAME_STATES.ROUND_END]: 3000          // 3 seconds
 };
@@ -61,6 +61,9 @@ export class GameState {
         this.phaseTimeLeft = PHASE_DURATIONS[newState] || 0;
         
         console.log(`🔄 State transition: ${this.previousState} → ${this.currentState}`);
+        if (this.phaseTimeLeft > 0) {
+            console.log(`⏱️ Timer démarré: ${this.phaseTimeLeft}ms pour ${this.currentState}`);
+        }
         
         this.notifyStateChange();
         
@@ -186,6 +189,7 @@ export class GameState {
             this.phaseTimeLeft -= deltaTime;
             
             if (this.phaseTimeLeft <= 0) {
+                console.log(`⏰ Timer expiré pour ${this.currentState}, transition automatique...`);
                 this.handlePhaseTimeout();
             }
         }
@@ -205,9 +209,7 @@ export class GameState {
                 break;
             case GAME_STATES.COMBAT:
                 // IMPORTANT: Valider les canons après le combat avant de passer en réparation
-                if (this.gameManager.combatSystem) {
-                    this.gameManager.combatSystem.validateCannonsAfterCombat();
-                }
+                // TODO: Implémenter la validation des canons après combat si nécessaire
                 this.transition(GAME_STATES.REPAIR);
                 break;
             case GAME_STATES.REPAIR:
@@ -221,6 +223,8 @@ export class GameState {
 
     checkRepairResult() {
         console.log('🔍 Checking repair result...');
+        // La vérification de game over se fait maintenant dans GameManager
+        // via le callback onStateChange
         this.transition(GAME_STATES.ROUND_END);
     }
 

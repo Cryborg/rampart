@@ -1,4 +1,5 @@
 import { CELL_TYPES, CELL_PROPERTIES } from '../game/Grid.js';
+import { GAME_STATES } from '../game/GameState.js';
 import { GAME_CONFIG } from '../config/GameConstants.js';
 import { adjustBrightness, rgbToHex, hexToRgb } from '../utils/GameUtils.js';
 import { CoordinateService } from '../services/CoordinateService.js';
@@ -357,10 +358,17 @@ export class Renderer {
             this.renderPiecePreview(player.currentPiece, player.piecePosition.x, player.piecePosition.y, pieceColor);
         }
         
-        // Render cursor for keyboard players during cannon placement
-        if (player.controlType !== 'mouse' && player.cursorPosition && 
-            this.gameManager && this.gameManager.gameState.currentState === 'PLACE_CANNONS') {
-            this.renderPlayerCursor(player);
+        // Render cursor for keyboard players during gameplay phases
+        if (player.controlType !== 'mouse' && player.cursorPosition && this.gameManager) {
+            const currentState = this.gameManager.gameState.currentState;
+            const showCursor = currentState === GAME_STATES.PLACE_CANNONS || 
+                              currentState === GAME_STATES.COMBAT || 
+                              currentState === GAME_STATES.REPAIR;
+            
+            
+            if (showCursor) {
+                this.renderPlayerCursor(player);
+            }
         }
     }
     
@@ -370,56 +378,109 @@ export class Renderer {
     renderPlayerCursor(player) {
         const screenPos = this.gridToScreen(player.cursorPosition.x, player.cursorPosition.y);
         
+        
         this.ctx.save();
         
-        // Vérifier si la position est valide pour placer un canon
-        const isValidPosition = this.gameManager?.canPlaceCannonAt?.(player.cursorPosition.x, player.cursorPosition.y);
+        // Vérifier si la position est valide selon la phase
+        let isValidPosition = false;
+        let actionText = '';
+        let showCount = false;
         
-        // Couleur du curseur selon la validité
-        const cursorColor = isValidPosition ? '#00ff00' : '#ff0000'; // Vert si valide, rouge sinon
+        if (this.gameManager.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
+            isValidPosition = this.gameManager?.canPlaceCannonAt?.(player.cursorPosition.x, player.cursorPosition.y, player.id);
+            actionText = `${player.controlScheme?.keys?.action || 'SPACE'} pour placer canon`;
+            showCount = true;
+        } else if (this.gameManager.gameState.currentState === GAME_STATES.COMBAT) {
+            isValidPosition = true; // Curseur toujours visible en combat
+            actionText = `${player.controlScheme?.keys?.action || 'SPACE'} pour tirer`;
+        } else if (this.gameManager.gameState.currentState === GAME_STATES.REPAIR) {
+            isValidPosition = true; // Curseur toujours visible en repair
+            actionText = `${player.controlScheme?.keys?.action || 'SPACE'} pour pièce`;
+        }
         
-        // Bordure clignotante du curseur (2x2 pour canon)
+        // Couleur du curseur : couleur du joueur si valide, rouge si impossible
+        let cursorColor = isValidPosition ? player.color : '#ff0000';
+        
+        // Bordure clignotante du curseur (2x2 pour canon, 1x1 pour autres phases)
         const time = Date.now();
-        const alpha = 0.5 + 0.3 * Math.sin(time * 0.005); // Clignotement
+        const alpha = 0.7 + 0.3 * Math.sin(time * 0.008); // Clignotement plus visible
         
-        this.ctx.strokeStyle = cursorColor;
-        this.ctx.globalAlpha = alpha;
-        this.ctx.lineWidth = 3;
-        this.ctx.setLineDash([5, 5]);
+        // Taille du curseur selon la phase
+        const cursorSize = this.gameManager.gameState.currentState === GAME_STATES.PLACE_CANNONS ? 2 : 1;
         
-        // Rectangle 2x2 pour le canon
-        this.ctx.strokeRect(
-            screenPos.x - 1, 
-            screenPos.y - 1, 
-            this.cellSize * 2 + 2, 
-            this.cellSize * 2 + 2
-        );
+        // Curseur spécial pour Player 2 (plus visible)
+        if (player.id === 2) {
+            // Bordure épaisse et colorée
+            this.ctx.strokeStyle = '#00ffff'; // Cyan vif
+            this.ctx.globalAlpha = alpha;
+            this.ctx.lineWidth = 4;
+            this.ctx.setLineDash([8, 4]);
+            
+            this.ctx.strokeRect(
+                screenPos.x - 2, 
+                screenPos.y - 2, 
+                this.cellSize * cursorSize + 4, 
+                this.cellSize * cursorSize + 4
+            );
+            
+            // Croix au centre pour bien marquer la position
+            this.ctx.strokeStyle = '#ffff00'; // Jaune
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([]);
+            const centerX = screenPos.x + (this.cellSize * cursorSize) / 2;
+            const centerY = screenPos.y + (this.cellSize * cursorSize) / 2;
+            const crossSize = 8;
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(centerX - crossSize, centerY);
+            this.ctx.lineTo(centerX + crossSize, centerY);
+            this.ctx.moveTo(centerX, centerY - crossSize);
+            this.ctx.lineTo(centerX, centerY + crossSize);
+            this.ctx.stroke();
+        } else {
+            // Curseur normal pour Player 1
+            this.ctx.strokeStyle = cursorColor;
+            this.ctx.globalAlpha = alpha;
+            this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([5, 5]);
+            
+            this.ctx.strokeRect(
+                screenPos.x - 1, 
+                screenPos.y - 1, 
+                this.cellSize * cursorSize + 2, 
+                this.cellSize * cursorSize + 2
+            );
+        }
         
         this.ctx.setLineDash([]);
         
-        // Afficher les coordonnées et le joueur
+        // Afficher les informations du joueur
         this.ctx.globalAlpha = 1;
         this.ctx.fillStyle = player.color;
         this.ctx.font = 'bold 12px Arial';
         this.ctx.textAlign = 'center';
         
-        // Calculer canons restants pour ce joueur
-        const cannonsLeft = this.gameManager.calculateCannonsToPlace(player.id);
+        // Texte selon la phase
+        let displayText = `J${player.id}`;
+        if (showCount) {
+            const cannonsLeft = this.gameManager.calculateCannonsToPlace(player.id);
+            displayText += ` (${cannonsLeft})`;
+        }
         
         this.ctx.fillText(
-            `J${player.id} (${cannonsLeft})`, 
-            screenPos.x + this.cellSize, 
+            displayText, 
+            screenPos.x + this.cellSize * cursorSize / 2, 
             screenPos.y - 8
         );
         
         // Instructions de contrôle
-        if (isValidPosition) {
+        if (isValidPosition && actionText) {
             this.ctx.fillStyle = '#ffffff';
             this.ctx.font = '10px Arial';
             this.ctx.fillText(
-                `${player.controlScheme?.keys?.action || 'SPACE'} pour placer`, 
-                screenPos.x + this.cellSize, 
-                screenPos.y + this.cellSize * 2 + 15
+                actionText, 
+                screenPos.x + this.cellSize * cursorSize / 2, 
+                screenPos.y + this.cellSize * cursorSize + 15
             );
         }
         

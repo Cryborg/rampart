@@ -80,12 +80,24 @@ Recréation du jeu d'arcade classique Rampart (Atari 1990) en JavaScript ES6 mod
 - Formule basée sur les cases dorées disponibles
 
 ### Système de contrôles
-- **Souris :** Placement/suppression de canons (clic gauche/droit), déplacement pièces
-- **Clavier :** 
-  - `Espace` / `R` : Rotation des pièces (phase REPAIR)
+- **Player 1 (Souris) :** 
+  - Placement/suppression de canons (clic gauche/droit)
+  - Tir en combat (clic gauche sur cible)
+  - Déplacement et placement de pièces
+- **Player 2 (Flèches) :** 
+  - Déplacement curseur (flèches directionnelles)
+  - Placement canons/tir (Espace)  
+  - Rotation pièces (Entrée)
+- **Player 3 (WASD) :**
+  - Déplacement curseur (WASD)
+  - Placement canons/tir (Q)
+  - Rotation pièces (E)
+- **Touches globales :**
   - `Entrée` : Forcer passage au combat (phase PLACE_CANNONS)
   - `Échap` : Pause/reprendre le jeu
-- **Aperçus visuels :** Prévisualisation canons 2x2 (vert=possible, rouge=impossible)
+- **Aperçus visuels :** 
+  - Prévisualisation canons 2x2 (vert=possible, rouge=impossible)
+  - Curseur spécialisé P2 (cyan + croix jaune)
 - **Interface responsive :** Adaptation automatique taille écran
 
 ## État d'avancement
@@ -100,6 +112,9 @@ Recréation du jeu d'arcade classique Rampart (Atari 1990) en JavaScript ES6 mod
 - **✅ Gameplay canons complet** - Placement 2x2, compteur par phase, formule Rampart
 - **✅ Contrôles fonctionnels** - Souris, clavier (Entrée, Espace, Échap)
 - **✅ Interface debug** - Panneau temps réel avec statistiques détaillées
+- **✅ Mode multijoueur local complet** - 2-3 joueurs simultanés avec territoires séparés
+- **✅ Système de contrôles multijoueur** - P1: Souris, P2: Flèches, P3: WASD
+- **✅ Combat multijoueur fonctionnel** - Système unifié de tir pour tous les joueurs
 
 ### 🚧 En cours (Phase 2 - PROCHAINES ÉTAPES)
 - **Système de combat** - IA bateaux ennemis, tir automatique des canons
@@ -110,9 +125,9 @@ Recréation du jeu d'arcade classique Rampart (Atari 1990) en JavaScript ES6 mod
 ### 📋 À implémenter (Phase 3)
 - Assets graphiques (sprites 32x32)
 - Système audio complet
-- Animations et effets visuels
-- Mode multijoueur local
+- Animations et effets visuels avancés
 - Interface d'édition des contrôles
+- Balancing multijoueur (vitesse, timers)
 
 ## Configuration et utilisation
 
@@ -183,7 +198,32 @@ window.game.gameManager.players[0].addScore(1000);
 4. **🎯 Système de dégâts** - Canons détruits, murs endommagés, réparations
 5. **🎯 Interface finale** - Retirer debug, ajouter scores, UI soignée
 
-**État actuel :** MVP entièrement fonctionnel avec système de canons complet. Prêt pour implémentation du combat réel.
+**État actuel :** MVP multijoueur entièrement fonctionnel avec système de combat unifié. Tous les joueurs (P1-P3) peuvent placer des canons, se déplacer et tirer avec leurs contrôles dédiés.
+
+## Détails techniques multijoueur
+
+### Activation du mode multijoueur
+- **Interface :** Bouton "👥 Multijoueur" dans le menu principal
+- **Méthodes :** `startMultiGame()` → `initializeMultiPlayersFromConfig()`
+- **Territoires :** Assignation automatique de zones 12x12 pour chaque joueur
+- **Mode par défaut :** Solo (`initializePlayers()` = 1 joueur souris uniquement)
+
+### Gestion des contrôles multijoueur
+- **Distribution clavier :** `distributeKeyboardInput()` route les touches vers le bon joueur
+- **Méthodes communes :** Tous les joueurs utilisent les mêmes méthodes (`handlePlayerMovement`, `handlePlayerAction`)
+- **Système unifié :** Combat via `combatSystem.handleCannonClick()` pour tous les types de contrôles
+- **Curseurs visuels :** Rendu spécialisé par joueur (`renderPlayerCursor()`)
+
+### Problèmes résolus récemment
+1. **Curseur P2 invisible** → Curseur original trop discret, remplacé par version cyan + croix jaune
+2. **P2 ne bouge pas en COMBAT** → Ajout du cas COMBAT dans `handlePlayerMovement()`
+3. **P2 ne peut pas tirer** → Ajout du cas COMBAT dans `handlePlayerAction()` + utilisation du système unifié
+4. **Code dupliqué pour le tir** → Suppression de `handlePlayerFire()`, utilisation de `combatSystem.handleCannonClick()` pour tous
+
+### Architecture extensible
+- **Player 3 ready :** Système déjà préparé pour un 3ème joueur (WASD + QE)
+- **Contrôles modulaires :** Schémas de contrôles définis dans `Player.getControlScheme()`
+- **Rendu adaptatif :** Curseurs et interfaces s'adaptent automatiquement au nombre de joueurs
 
 ## Notes de compatibilité
 - ES6+ requis (modules, classes, arrow functions)

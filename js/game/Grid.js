@@ -429,6 +429,10 @@ export class Grid {
     }
 
     getCell(x, y) {
+        // Forcer les coordonnées à être des entiers pour éviter les erreurs de type
+        x = Math.floor(x);
+        y = Math.floor(y);
+        
         if (!this.isValidPosition(x, y)) return null;
         return this.cells[y][x];
     }

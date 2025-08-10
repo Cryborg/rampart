@@ -248,6 +248,7 @@ export class UIManager {
     updatePhase(phase, timeLeft) {
         this.currentPhase = phase;
         
+        
         // Update phase title and description
         if (this.elements.phaseTitle) {
             this.elements.phaseTitle.textContent = this.getPhaseName(phase);

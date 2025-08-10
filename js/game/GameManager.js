@@ -1,4 +1,4 @@
-import { GameState } from './GameState.js';
+import { GameState, GAME_STATES } from './GameState.js';
 import { Grid } from './Grid.js';
 import { Renderer } from '../ui/Renderer.js';
 import { InputHandler } from '../ui/InputHandler.js';
@@ -180,6 +180,31 @@ export class GameManager {
             // Distribuer les inputs clavier aux bons joueurs
             this.distributeKeyboardInput(key);
         };
+        
+        // Callback pour repositionner les curseurs lors des transitions d'état
+        this.gameState.onStateChange((newState, oldState) => {
+            if (newState === GAME_STATES.REPAIR) {
+                // Repositionner les curseurs clavier sur les castle-cores
+                this.players.forEach(player => {
+                    if (player.controlType !== 'mouse' && player.castle.core) {
+                        player.cursorPosition = { x: player.castle.core.x, y: player.castle.core.y };
+                        console.log(`🎯 Curseur ${player.name} repositionné au château: (${player.castle.core.x}, ${player.castle.core.y})`);
+                    }
+                    
+                    // Donner une pièce Tetris au joueur s'il n'en a pas
+                    if (!player.currentPiece && this.pieceGenerator) {
+                        player.currentPiece = this.pieceGenerator.generatePiece(player.id);
+                        player.piecePosition = { x: player.cursorPosition.x, y: player.cursorPosition.y };
+                        console.log(`🧩 ${player.name} reçoit une pièce ${player.currentPiece.type}`);
+                    }
+                });
+            }
+            
+            // Vérifier game over après la phase REPAIR
+            if (oldState === GAME_STATES.REPAIR && newState === GAME_STATES.ROUND_END) {
+                this.checkGameOverAfterRepair();
+            }
+        });
     }
 
     /**
@@ -237,9 +262,9 @@ export class GameManager {
      */
     isPlayerActionAllowed(player, action) {
         // Dans Rampart, TOUTES les phases gameplay sont simultanées !
-        if (this.gameState.currentState === 'COMBAT' || 
-            this.gameState.currentState === 'PLACE_CANNONS' || 
-            this.gameState.currentState === 'REPAIR') {
+        if (this.gameState.currentState === GAME_STATES.COMBAT || 
+            this.gameState.currentState === GAME_STATES.PLACE_CANNONS || 
+            this.gameState.currentState === GAME_STATES.REPAIR) {
             return true;
         }
         
@@ -278,7 +303,7 @@ export class GameManager {
     handlePlayerMovement(player, direction) {
         const moveAmount = 1;
         
-        if (this.gameState.currentState === 'PLACE_CANNONS') {
+        if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
             // Déplacer le curseur pour placement canons
             switch (direction) {
                 case 'up':
@@ -294,21 +319,56 @@ export class GameManager {
                     player.cursorPosition.x = Math.min(this.grid.width - 2, player.cursorPosition.x + moveAmount); // -2 pour canon 2x2
                     break;
             }
-        } else if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
-            // Déplacer la pièce en mode réparation
+        } else if (this.gameState.currentState === GAME_STATES.COMBAT) {
+            // Déplacer le curseur pour viser/tirer en combat
             switch (direction) {
                 case 'up':
-                    player.piecePosition.y = Math.max(0, player.piecePosition.y - moveAmount);
+                    player.cursorPosition.y = Math.max(0, player.cursorPosition.y - moveAmount);
                     break;
-            case 'down':
-                player.piecePosition.y = Math.min(this.grid.height - 1, player.piecePosition.y + moveAmount);
-                break;
-            case 'left':
-                player.piecePosition.x = Math.max(0, player.piecePosition.x - moveAmount);
-                break;
-            case 'right':
-                player.piecePosition.x = Math.min(this.grid.width - 1, player.piecePosition.x + moveAmount);
-                break;
+                case 'down':
+                    player.cursorPosition.y = Math.min(this.grid.height - 1, player.cursorPosition.y + moveAmount);
+                    break;
+                case 'left':
+                    player.cursorPosition.x = Math.max(0, player.cursorPosition.x - moveAmount);
+                    break;
+                case 'right':
+                    player.cursorPosition.x = Math.min(this.grid.width - 1, player.cursorPosition.x + moveAmount);
+                    break;
+            }
+        } else if (this.gameState.currentState === GAME_STATES.REPAIR) {
+            // En REPAIR : déplacer la pièce si elle existe, sinon le curseur
+            if (player.currentPiece) {
+                // Déplacer la pièce en mode réparation
+                switch (direction) {
+                    case 'up':
+                        player.piecePosition.y = Math.max(0, player.piecePosition.y - moveAmount);
+                        break;
+                    case 'down':
+                        player.piecePosition.y = Math.min(this.grid.height - 1, player.piecePosition.y + moveAmount);
+                        break;
+                    case 'left':
+                        player.piecePosition.x = Math.max(0, player.piecePosition.x - moveAmount);
+                        break;
+                    case 'right':
+                        player.piecePosition.x = Math.min(this.grid.width - 1, player.piecePosition.x + moveAmount);
+                        break;
+                }
+            } else {
+                // Pas de pièce : déplacer le curseur librement
+                switch (direction) {
+                    case 'up':
+                        player.cursorPosition.y = Math.max(0, player.cursorPosition.y - moveAmount);
+                        break;
+                    case 'down':
+                        player.cursorPosition.y = Math.min(this.grid.height - 1, player.cursorPosition.y + moveAmount);
+                        break;
+                    case 'left':
+                        player.cursorPosition.x = Math.max(0, player.cursorPosition.x - moveAmount);
+                        break;
+                    case 'right':
+                        player.cursorPosition.x = Math.min(this.grid.width - 1, player.cursorPosition.x + moveAmount);
+                        break;
+                }
             }
         }
     }
@@ -317,7 +377,7 @@ export class GameManager {
      * Gérer l'action principale d'un joueur
      */
     handlePlayerAction(player) {
-        if (this.gameState.currentState === 'PLACE_CANNONS') {
+        if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
             // Placer un canon à la position du curseur (contrôles clavier)
             const cursorX = player.cursorPosition.x;
             const cursorY = player.cursorPosition.y;
@@ -341,13 +401,24 @@ export class GameManager {
                     player.stats.cannonsPlaced++;
                     
                     console.log(`Canon place pour Joueur ${player.id} (${player.cannons.length} total)`);
+                    
+                    // Vérifier si transition automatique vers COMBAT nécessaire
+                    if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
+                        this.checkAutoTransitionToCombat();
+                    }
                 } else {
                     console.log(`❌ Impossible de placer le canon à (${cursorX}, ${cursorY})`);
                 }
             } else {
                 console.log(`❌ Position invalide pour canon: (${cursorX}, ${cursorY})`);
             }
-        } else if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
+        } else if (this.gameState.currentState === GAME_STATES.COMBAT) {
+            // Tirer avec les canons du joueur vers la position du curseur (même système que la souris)
+            console.log(`🎯 Joueur ${player.id} tire vers (${player.cursorPosition.x}, ${player.cursorPosition.y})`);
+            if (this.combatSystem) {
+                this.combatSystem.handleCannonClick(player.cursorPosition.x, player.cursorPosition.y, player.id);
+            }
+        } else if (this.gameState.currentState === GAME_STATES.REPAIR && player.currentPiece) {
             // Placer la pièce actuelle
             const pieceX = player.piecePosition.x;
             const pieceY = player.piecePosition.y;
@@ -361,17 +432,18 @@ export class GameManager {
                 this.validatePlayerCannons();
                 
                 // Prendre une nouvelle pièce
-                player.currentPiece = this.pieceGenerator.getRandomPiece();
+                player.currentPiece = this.pieceGenerator.generatePiece(player.id);
                 console.log(`🧩 ${player.name} place une pièce et en prend une nouvelle`);
             }
         }
     }
 
+
     /**
      * Gérer la rotation pour un joueur
      */
     handlePlayerRotate(player) {
-        if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
+        if (this.gameState.currentState === GAME_STATES.REPAIR && player.currentPiece) {
             player.currentPiece.rotate();
             console.log(`🔄 ${player.name} fait tourner sa pièce`);
         }
@@ -393,7 +465,11 @@ export class GameManager {
      * Terminer le tour d'un joueur
      */
     finishPlayerTurn(player) {
-        if (!this.gameState.isSequentialPhase) return;
+        // En mode multijoueur Rampart, les phases sont simultanées - pas de tours
+        if (this.gameMode !== 'solo' || !this.gameState.isSequentialPhase) {
+            console.log(`❌ Mode simultané: pas de fin de tour pour ${player.name}`);
+            return;
+        }
         
         const playerId = player.id - 1; // Convertir en index (base 0)
         console.log(`✅ ${player.name} termine son tour`);
@@ -419,7 +495,7 @@ export class GameManager {
         this.currentHoverPos = gridPos;
         
         // Update piece position during repair phase
-        if (this.gameState.currentState === 'REPAIR') {
+        if (this.gameState.currentState === GAME_STATES.REPAIR) {
             const player = this.players[this.currentPlayer];
             if (player.currentPiece) {
                 // Place piece with top-left corner at cursor position
@@ -436,13 +512,13 @@ export class GameManager {
         }
         
         // Update cannon preview during cannon placement phase
-        if (this.gameState.currentState === 'PLACE_CANNONS') {
+        if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
             // Store cannon preview position
             this.cannonPreviewPos = gridPos;
         }
         
         // Stocker la position exacte de la souris pour la croix de visée en combat (libre)
-        if (this.gameState.currentState === 'COMBAT') {
+        if (this.gameState.currentState === GAME_STATES.COMBAT) {
             this.combatCrosshairScreenPos = { x: canvasX, y: canvasY };
             this.combatCrosshairGridPos = gridPos; // Position de grille pour le tir
         }
@@ -452,16 +528,16 @@ export class GameManager {
         const gridPos = this.renderer.screenToGrid(x, y);
         
         switch (this.gameState.currentState) {
-            case 'SELECT_TERRITORY':
+            case GAME_STATES.SELECT_TERRITORY:
                 this.handleTerritorySelection(gridPos);
                 break;
-            case 'PLACE_CANNONS':
+            case GAME_STATES.PLACE_CANNONS:
                 this.handleCannonPlacement(gridPos, button);
                 break;
-            case 'COMBAT':
+            case GAME_STATES.COMBAT:
                 this.handleCombatClick(gridPos, button);
                 break;
-            case 'REPAIR':
+            case GAME_STATES.REPAIR:
                 this.handlePiecePlacement(gridPos, button);
                 break;
             default:
@@ -486,7 +562,7 @@ export class GameManager {
         switch (key) {
             case ' ':
             case 'r':
-                if (this.gameState.currentState === 'REPAIR') {
+                if (this.gameState.currentState === GAME_STATES.REPAIR) {
                     this.rotatePiece();
                 }
                 break;
@@ -501,9 +577,9 @@ export class GameManager {
                 break;
             case 'Enter':
             case 'NumpadEnter':
-                if (this.gameState.currentState === 'PLACE_CANNONS') {
+                if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
                     console.log('⏩ Passage forcé au combat (Entrée pressée)');
-                    this.gameState.transition('COMBAT');
+                    this.gameState.transition(GAME_STATES.COMBAT);
                 }
                 break;
         }
@@ -511,7 +587,7 @@ export class GameManager {
 
     handleTerritorySelection(gridPos) {
         console.log('Territory selection at:', gridPos);
-        this.gameState.transition('PLACE_CANNONS');
+        this.gameState.transition(GAME_STATES.PLACE_CANNONS);
     }
 
     handleCannonPlacement(gridPos, button) {
@@ -539,10 +615,20 @@ export class GameManager {
                     if (cannonsToPlace <= 0) {
                         console.log(`🎯 Joueur ${this.currentPlayer + 1} a terminé de placer ses canons`);
                         
-                        // Transition directe au combat (gameplay Rampart original)
-                        setTimeout(() => {
-                            this.gameState.transition('COMBAT');
-                        }, 1000);
+                        // EN MODE MULTIJOUEUR: Ne pas terminer la phase, laisser les autres jouer
+                        if (this.gameMode === 'solo') {
+                            // Transition directe au combat (gameplay Rampart original)
+                            setTimeout(() => {
+                                this.gameState.transition(GAME_STATES.COMBAT);
+                            }, 1000);
+                        } else {
+                            console.log(`👥 Mode multijoueur: ${this.players[this.currentPlayer].name} a fini, mais la phase continue`);
+                        }
+                    }
+                    
+                    // Vérifier si transition automatique vers COMBAT nécessaire (multijoueur)
+                    if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
+                        this.checkAutoTransitionToCombat();
                     }
                 } else {
                     console.log(`❌ Impossible de placer un canon à (${gridPos.x}, ${gridPos.y})`);
@@ -556,13 +642,15 @@ export class GameManager {
     }
 
     canPlaceCannonAt(x, y, playerId = null) {
+        const targetPlayerId = playerId || this.players[this.currentPlayer].id;
+        
         // Validation des coordonnées dans les limites de la grille
         if (x < 0 || y < 0 || x >= GAME_CONFIG.GRID_WIDTH - 1 || y >= GAME_CONFIG.GRID_HEIGHT - 1) {
             return false;
         }
         
         // Vérifier s'il reste des canons à placer pour ce joueur
-        const cannonsToPlace = this.calculateCannonsToPlace(playerId);
+        const cannonsToPlace = this.calculateCannonsToPlace(targetPlayerId);
         if (cannonsToPlace <= 0) {
             return false;
         }
@@ -574,20 +662,18 @@ export class GameManager {
         }
         
         // Vérifier que les 4 cellules sont toutes dans la zone constructible DU BON JOUEUR
-        const targetPlayerId = playerId || this.players[this.currentPlayer].id;
-        
         for (let dx = 0; dx < 2; dx++) {
             for (let dy = 0; dy < 2; dy++) {
                 const cell = this.grid.getCell(x + dx, y + dy);
                 if (!cell || !cell.cannonZone || cell.type !== 'land' || 
                     cell.cannonZoneOwnerId !== targetPlayerId) {
-                    console.log(`DEBUG: Canon invalide à (${x + dx}, ${y + dy}): cannonZone=${cell?.cannonZone}, ownerId=${cell?.cannonZoneOwnerId}, targetId=${targetPlayerId}`);
                     return false;
                 }
             }
         }
         
-        return this.grid.canPlaceCannon(x, y, this.players[this.currentPlayer].id);
+        // CORRECTION: Utiliser targetPlayerId au lieu de currentPlayer
+        return this.grid.canPlaceCannon(x, y, targetPlayerId);
     }
 
     calculateCannonsToPlace(playerId = null) {
@@ -828,6 +914,37 @@ export class GameManager {
             // Pas de zones fermées, mais on validate quand même pour être sûr
             this.validatePlayerCannons();
         }
+        
+        // AJOUT: Vérifier si transition automatique nécessaire
+        if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
+            this.checkAutoTransitionToCombat();
+        }
+    }
+    
+    /**
+     * Vérifier si tous les joueurs ont 0 canons à placer et déclencher transition auto
+     */
+    checkAutoTransitionToCombat() {
+        let totalCannonsToPlace = 0;
+        let playerDetails = [];
+        
+        this.players.forEach(player => {
+            const cannonsLeft = this.calculateCannonsToPlace(player.id);
+            totalCannonsToPlace += cannonsLeft;
+            playerDetails.push(`J${player.id}: ${cannonsLeft}`);
+        });
+        
+        console.log(`🔍 Canons restants par joueur: [${playerDetails.join(', ')}] → Total: ${totalCannonsToPlace}`);
+        
+        if (totalCannonsToPlace === 0) {
+            console.log(`🎯 TOUS les joueurs ont terminé leurs canons ! Transition automatique vers combat dans 2s.`);
+            setTimeout(() => {
+                if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
+                    console.log(`🚀 Transition automatique : PLACE_CANNONS → COMBAT`);
+                    this.gameState.transition(GAME_STATES.COMBAT);
+                }
+            }, 2000);
+        }
     }
 
     highlightConstructibleArea(area, playerId = null) {
@@ -859,12 +976,16 @@ export class GameManager {
             for (let x = 0; x < this.grid.width; x++) {
                 const cell = this.grid.getCell(x, y);
                 if (cell) {
-                    cell.cannonZone = false;
-                    cell.cannonZoneOwnerId = null;
+                    // Nettoyer TOUTES les zones sauf les canons actifs
+                    // Cela évite les zones fantômes tout en préservant les canons fonctionnels
+                    if (cell.type !== 'cannon') {
+                        cell.cannonZone = false;
+                        cell.cannonZoneOwnerId = null;
+                    }
                 }
             }
         }
-        console.log('🧽 Zones de canons nettoyées');
+        console.log('🧽 Zones de canons nettoyées (sauf canons actifs)');
     }
 
     recalculateCannonZones() {
@@ -953,6 +1074,12 @@ export class GameManager {
         this.grid.setCellType(coreX, coreY, 'castle-core', player.id);
         player.castle.core = { x: coreX, y: coreY };
         
+        // CRUCIAL: Repositionner le curseur des joueurs clavier au château
+        if (player.controlType !== 'mouse') {
+            player.cursorPosition = { x: coreX, y: coreY };
+            console.log(`🎯 Curseur Joueur ${player.id} repositionné au château: (${coreX}, ${coreY})`);
+        }
+        
         console.log(`🏰 Château joueur ${player.id} créé ${GAME_CONFIG.SIZES.CASTLE_SIZE}x${GAME_CONFIG.SIZES.CASTLE_SIZE} avec core à (${coreX}, ${coreY})`);
     }
     
@@ -1002,7 +1129,7 @@ export class GameManager {
             player.currentPiece = null;
             player.piecePosition = null;
             
-            this.gameState.transition('PLACE_CANNONS');
+            this.gameState.transition(GAME_STATES.PLACE_CANNONS);
         }, GAME_CONFIG.TIMERS.REPAIR_PHASE);
         
         console.log('⏰ Timer de réparation : 15 secondes');
@@ -1022,17 +1149,13 @@ export class GameManager {
         // Note: Les compteurs sont maintenant par joueur, plus de variable globale
         
         const currentCannons = player.cannons.length;
+        const maxCannons = this.calculateMaxCannonsForPhase(player.id);
         
         // Les canons restent en place ! Ils ne sont supprimés qu'au combat s'ils sont détruits
-        console.log(`🎯 Canons actuels: ${currentCannons}, Max cette phase: ${this.maxCannonsThisPhase}`);
+        console.log(`🎯 Canons actuels: ${currentCannons}, Max cette phase: ${maxCannons}`);
         
-        // Si aucun canon à placer, transition automatique après un délai
-        if (this.maxCannonsThisPhase <= 0) {
-            console.log(`🎯 Aucun canon à placer. Transition automatique vers combat dans 2s.`);
-            setTimeout(() => {
-                this.gameState.transition('COMBAT');
-            }, 2000);
-        }
+        // La transition automatique est maintenant gérée dans checkAutoTransitionToCombat()
+        // appelée depuis checkCastleClosure()
         
         // TODO: Ajouter timer optionnel pour cette phase si nécessaire
     }
@@ -1060,7 +1183,7 @@ export class GameManager {
             // Fallback: transition automatique après 10 secondes
             setTimeout(() => {
                 console.log('Combat simule termine ! Transition vers reparation.');
-                this.gameState.transition('REPAIR');
+                this.gameState.transition(GAME_STATES.REPAIR);
             }, 10000);
         }
     }
@@ -1073,7 +1196,7 @@ export class GameManager {
         // Transition vers la réparation après un délai
         setTimeout(() => {
             console.log('⚔️ Combat terminé ! Transition vers réparation.');
-            this.gameState.transition('REPAIR');
+            this.gameState.transition(GAME_STATES.REPAIR);
         }, 2000); // 2 secondes de pause
     }
 
@@ -1082,7 +1205,7 @@ export class GameManager {
         
         // Transition vers l'écran de fin
         // TODO: Implémenter écran de fin de partie
-        this.gameState.transition('GAME_OVER');
+        this.gameState.transition(GAME_STATES.GAME_OVER);
     }
 
     start() {
@@ -1098,25 +1221,25 @@ export class GameManager {
         this.gameState.onStateChange((newState, oldState) => {
             console.log(`🔄 State: ${oldState} → ${newState}`);
             
-            if (oldState === 'REPAIR') {
+            if (oldState === GAME_STATES.REPAIR) {
                 this.clearRepairTimer();
             }
             
             // Recalcul des zones fermées déplacé vers startRepairPhase() pour éviter la régression
             
-            if (newState === 'REPAIR') {
+            if (newState === GAME_STATES.REPAIR) {
                 this.startRepairPhase();
                 // Cacher le curseur pendant la réparation
                 this.renderer.setCursorVisibility(false);
             }
             
-            if (newState === 'COMBAT') {
+            if (newState === GAME_STATES.COMBAT) {
                 this.startCombatPhase();
                 // Montrer le curseur pendant le combat (visée)
                 this.renderer.setCursorVisibility(true);
             }
             
-            if (newState === 'PLACE_CANNONS') {
+            if (newState === GAME_STATES.PLACE_CANNONS) {
                 this.startCannonPlacementPhase();
                 // Cacher le curseur pendant le placement des canons
                 this.renderer.setCursorVisibility(false);
@@ -1137,7 +1260,7 @@ export class GameManager {
         // Château déjà créé dans setupDefaultLevel()
         
         // Commencer par la phase de placement des canons (ordre Rampart officiel)
-        this.gameState.transition('PLACE_CANNONS');
+        this.gameState.transition(GAME_STATES.PLACE_CANNONS);
         
         this.startGameLoop();
     }
@@ -1184,7 +1307,7 @@ export class GameManager {
         
         // Lancer la première phase
         console.log('🚀 Lancement de la phase PLACE_CANNONS...');
-        this.gameState.transition('PLACE_CANNONS');
+        this.gameState.transition(GAME_STATES.PLACE_CANNONS);
         
         console.log('✅ Jeu multijoueur démarré !');
     }
@@ -1255,21 +1378,21 @@ export class GameManager {
         this.gameState.onStateChange((newState, oldState) => {
             console.log(`🔄 State: ${oldState} → ${newState}`);
             
-            if (oldState === 'REPAIR') {
+            if (oldState === GAME_STATES.REPAIR) {
                 this.clearRepairTimer();
             }
             
-            if (newState === 'REPAIR') {
+            if (newState === GAME_STATES.REPAIR) {
                 this.startRepairPhase();
                 this.renderer.setCursorVisibility(false);
             }
             
-            if (newState === 'COMBAT') {
+            if (newState === GAME_STATES.COMBAT) {
                 this.startCombatPhase();
                 this.renderer.setCursorVisibility(true);
             }
             
-            if (newState === 'PLACE_CANNONS') {
+            if (newState === GAME_STATES.PLACE_CANNONS) {
                 this.startCannonPlacementPhase();
                 this.renderer.setCursorVisibility(false);
             }
@@ -1310,7 +1433,7 @@ export class GameManager {
         this.gameState.update(deltaTime);
         
         // Mettre à jour le timer de réparation
-        if (this.gameState.currentState === 'REPAIR' && this.repairStartTime) {
+        if (this.gameState.currentState === GAME_STATES.REPAIR && this.repairStartTime) {
             const elapsed = (Date.now() - this.repairStartTime) / 1000;
             this.repairTimeLeft = Math.max(0, GAME_CONFIG.TIMERS.REPAIR_PHASE / 1000 - elapsed);
         }
@@ -1351,7 +1474,7 @@ export class GameManager {
         }
         
         // Update piece preview
-        if (this.gameState.currentState === 'REPAIR' && player.currentPiece) {
+        if (this.gameState.currentState === GAME_STATES.REPAIR && player.currentPiece) {
             this.renderPiecePreview(player.currentPiece);
         }
     }
@@ -1392,9 +1515,9 @@ export class GameManager {
         
         // Render hover indicators based on current state
         if (this.currentHoverPos) {
-            if (this.gameState.currentState === 'REPAIR') {
+            if (this.gameState.currentState === GAME_STATES.REPAIR) {
                 this.renderer.renderHoverIndicator(this.currentHoverPos);
-            } else if (this.gameState.currentState === 'PLACE_CANNONS' && this.cannonPreviewPos) {
+            } else if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS && this.cannonPreviewPos) {
                 this.renderCannonPreview(this.cannonPreviewPos);
             }
         }
@@ -1408,7 +1531,7 @@ export class GameManager {
         }
         
         // Rendre les systèmes de combat
-        if (this.combatSystem && this.gameState.currentState === 'COMBAT') {
+        if (this.combatSystem && this.gameState.currentState === GAME_STATES.COMBAT) {
             this.combatSystem.render(this.ctx, this.renderer);
             
             // Afficher la croix de visée
@@ -1420,7 +1543,7 @@ export class GameManager {
         }
         
         // Timer très visible en phase REPAIR
-        if (this.gameState.currentState === 'REPAIR' && this.repairTimeLeft !== undefined) {
+        if (this.gameState.currentState === GAME_STATES.REPAIR && this.repairTimeLeft !== undefined) {
             // Positionnement à droite
             const uiX = this.canvas.width - 220;
             const uiY = 10;
@@ -1450,7 +1573,7 @@ export class GameManager {
         }
         
         // Indicateur de phase PLACE_CANNONS
-        if (this.gameState.currentState === 'PLACE_CANNONS') {
+        if (this.gameState.currentState === GAME_STATES.PLACE_CANNONS) {
             const player = this.players[this.currentPlayer];
             const cannonsToPlace = this.calculateCannonsToPlace();
             const currentCannons = player.cannons.length;
@@ -1556,6 +1679,71 @@ export class GameManager {
         }
     }
 
+    /**
+     * Vérifier si la partie doit se terminer après la phase REPAIR
+     * Conditions: aucun joueur n'a de château fermé
+     */
+    checkGameOverAfterRepair() {
+        console.log('🔍 Vérification game over après phase REPAIR...');
+        
+        // Mettre à jour les zones fermées pour tous les joueurs
+        this.updateCannonZones();
+        
+        // Compter les joueurs actifs ayant un château fermé
+        let playersWithClosedCastle = 0;
+        
+        this.players.forEach(player => {
+            if (!player.active) return;
+            
+            // Vérifier si le joueur a un château fermé
+            const hasCastle = this.hasClosedCastle(player);
+            if (hasCastle) {
+                playersWithClosedCastle++;
+                console.log(`✅ ${player.name} a un château fermé`);
+            } else {
+                console.log(`❌ ${player.name} n'a PAS de château fermé`);
+            }
+        });
+        
+        // Si aucun joueur n'a de château fermé → GAME OVER
+        if (playersWithClosedCastle === 0) {
+            console.log('💀 GAME OVER: Aucun joueur n\'a pu récupérer son château !');
+            
+            // Transition vers GAME_OVER au lieu de ROUND_END
+            setTimeout(() => {
+                this.gameState.transition(GAME_STATES.GAME_OVER);
+            }, 1000); // Petit délai pour que le joueur comprenne
+            
+            return true; // Game over triggered
+        }
+        
+        console.log(`✅ ${playersWithClosedCastle} joueur(s) ont un château fermé, la partie continue`);
+        return false; // Game continues
+    }
+
+    /**
+     * Vérifier si un joueur a un château fermé
+     */
+    hasClosedCastle(player) {
+        if (!player.castle.core) return false;
+        
+        // Chercher dans les zones fermées détectées
+        const closedCastles = this.grid.findClosedCastles();
+        
+        for (let castle of closedCastles) {
+            // Vérifier si le core du joueur est dans cette zone fermée
+            const coreInCastle = castle.area.some(cell => 
+                cell.x === player.castle.core.x && cell.y === player.castle.core.y
+            );
+            
+            if (coreInCastle) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
     saveGameState() {
         const gameData = {
             players: this.players,
@@ -1594,7 +1782,7 @@ export class GameManager {
         this.setupDefaultLevel('2players');
         
         // Démarrer directement en phase canons
-        this.gameState.transition('PLACE_CANNONS');
+        this.gameState.transition(GAME_STATES.PLACE_CANNONS);
         
         console.log('✅ Test 2 joueurs prêt !');
     }
