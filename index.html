@@ -8,30 +8,74 @@
 </head>
 <body>
     <div id="game-container">
-        <canvas id="game-canvas"></canvas>
+        <!-- Menu d'accueil -->
+        <div id="main-menu" class="main-menu">
+            <div class="menu-content">
+                <h1 class="menu-title">🏰 RAMPART</h1>
+                <p class="menu-subtitle">Défendez votre château contre les envahisseurs !</p>
+                
+                <div class="menu-buttons">
+                    <button id="solo-button" class="game-button menu-button">
+                        🎮 Mode Solo
+                    </button>
+                    <button id="multiplayer-button" class="game-button menu-button disabled" disabled>
+                        👥 Multijoueur
+                        <span class="coming-soon">(Bientôt disponible)</span>
+                    </button>
+                </div>
+                
+                <div class="menu-info">
+                    <h3>Comment jouer :</h3>
+                    <ul>
+                        <li>🏗️ <strong>Phase Construction :</strong> Placez vos pièces Tetris pour créer des zones fermées</li>
+                        <li>🎯 <strong>Phase Canons :</strong> Installez vos canons dans les zones dorées</li>
+                        <li>⚔️ <strong>Phase Combat :</strong> Détruisez tous les navires ennemis !</li>
+                        <li>🔧 <strong>Phase Réparation :</strong> Survivez tant que vos canons ou château sont protégés</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
         
-        <!-- Interface de jeu -->
-        <div id="game-ui">
-            <div id="phase-display">
-                <h2 id="phase-title">RAMPART</h2>
-                <p id="phase-description">Prêt à défendre votre château ?</p>
-                <div id="phase-timer"></div>
+        <!-- Interface et canvas côte à côte -->
+        <div id="game-layout" style="display: none;">
+            <!-- Interface de jeu sur le côté gauche -->
+            <div id="game-ui-left">
+                <div id="phase-display">
+                    <h2 id="phase-title">RAMPART</h2>
+                    <p id="phase-description">Prêt à défendre votre château ?</p>
+                    <div id="phase-timer"></div>
+                </div>
+                
+                <div id="game-stats">
+                    <h3>📊 Statistiques</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Round:</span>
+                        <span class="stat-value" id="current-round">1</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Canons:</span>
+                        <span class="stat-value" id="cannons-remaining">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Score:</span>
+                        <span class="stat-value" id="player-score">0</span>
+                    </div>
+                </div>
+                
+                <!-- Contrôles et aide -->
+                <div id="game-controls">
+                    <h3>Contrôles :</h3>
+                    <div class="control-item">🖱️ <strong>Souris :</strong> Viser et tirer</div>
+                    <div class="control-item">⏸️ <strong>Échap :</strong> Pause</div>
+                    <div class="control-item">🔧 <strong>F12 :</strong> Debug</div>
+                </div>
             </div>
             
-            <div id="game-stats">
-                <div class="stat-item">
-                    <span class="stat-label">Round:</span>
-                    <span class="stat-value" id="current-round">1</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Canons:</span>
-                    <span class="stat-value" id="cannons-remaining">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Score:</span>
-                    <span class="stat-value" id="player-score">0</span>
-                </div>
-            </div>
+            <canvas id="game-canvas"></canvas>
+        </div>
+        
+        <!-- Interface de jeu superposée -->
+        <div id="game-ui">
         </div>
         
         <!-- Modales -->

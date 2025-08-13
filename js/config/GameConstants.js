@@ -21,7 +21,7 @@ export const GAME_CONFIG = {
     },
     
     ENEMIES: {
-        SHIP_SPEED: 1.0,            // Cases par seconde
+        SHIP_SPEED: 1.3,            // Cases par seconde (+30%)
         LAND_UNIT_SPEED: 0.5,       // Plus lent
         SHIP_HP: 1,                 // Détruits en 1 tir
         LAND_UNIT_HP: 2,            // Plus résistants
@@ -65,7 +65,7 @@ export const GAME_CONFIG = {
             NOVICE: {
                 name: 'Novice',
                 hp: 3,                  // 3 points de vie
-                speed: 1.0,             // 100% vitesse de base
+                speed: 1.3,             // 130% vitesse de base (+30%)
                 baseAccuracy: 10,       // 10% de base
                 accuracyIncrement: 10,  // +10% par tir
                 maxAccuracy: 60,        // Max 60%
@@ -78,7 +78,7 @@ export const GAME_CONFIG = {
             VETERAN: {
                 name: 'Veteran',
                 hp: 6,                  // 6 points de vie
-                speed: 0.75,            // 75% vitesse de base
+                speed: 0.975,           // 97.5% vitesse de base (+30% de 75%)
                 baseAccuracy: 20,       // 20% de base
                 accuracyIncrement: 20,  // +20% par tir  
                 maxAccuracy: 80,        // Max 80%
@@ -91,7 +91,7 @@ export const GAME_CONFIG = {
             EXPERT: {
                 name: 'Expert',
                 hp: 10,                 // 10 points de vie
-                speed: 0.5,             // 50% vitesse de base
+                speed: 0.65,            // 65% vitesse de base (+30% de 50%)
                 baseAccuracy: 40,       // 40% de base
                 accuracyIncrement: 20,  // +20% par tir
                 maxAccuracy: 100,       // Max 100%

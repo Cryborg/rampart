@@ -21,11 +21,13 @@ class RampartApp {
             // Setup UI events
             this.setupUI();
             
+            // Setup menu events
+            this.setupMenuEvents();
+            
             console.log('✅ Rampart initialized successfully!');
             
-            // Démarrer automatiquement le jeu
-            console.log('🎮 Auto-starting game...');
-            this.startGame();
+            // Montrer le menu d'accueil au lieu de démarrer automatiquement
+            this.showMainMenu();
             
         } catch (error) {
             console.error('❌ Failed to initialize Rampart:', error);
@@ -88,6 +90,56 @@ class RampartApp {
                 this.gameManager.isPaused = true;
             }
         });
+    }
+    
+    setupMenuEvents() {
+        // Bouton Solo
+        const soloButton = document.getElementById('solo-button');
+        if (soloButton) {
+            soloButton.addEventListener('click', () => {
+                this.startSoloGame();
+            });
+        }
+        
+        // Le bouton multijoueur est désactivé pour l'instant
+        console.log('🎮 Menu events setup complete');
+    }
+    
+    showMainMenu() {
+        const mainMenu = document.getElementById('main-menu');
+        const gameLayout = document.getElementById('game-layout');
+        const gameUI = document.getElementById('game-ui');
+        
+        if (mainMenu) mainMenu.style.display = 'flex';
+        if (gameLayout) gameLayout.style.display = 'none';
+        if (gameUI) gameUI.style.display = 'none';
+        
+        console.log('📋 Main menu displayed');
+    }
+    
+    hideMainMenu() {
+        const mainMenu = document.getElementById('main-menu');
+        const gameLayout = document.getElementById('game-layout');
+        const gameUI = document.getElementById('game-ui');
+        
+        if (mainMenu) mainMenu.style.display = 'none';
+        if (gameLayout) gameLayout.style.display = 'flex';
+        if (gameUI) gameUI.style.display = 'block';
+        
+        // Forcer le resize du canvas après changement de layout
+        setTimeout(() => {
+            if (this.gameManager && this.gameManager.renderer) {
+                this.gameManager.renderer.resizeCanvas();
+            }
+        }, 50); // Petit délai pour que le DOM se mette à jour
+        
+        console.log('📋 Main menu hidden');
+    }
+    
+    startSoloGame() {
+        console.log('🎮 Starting solo game...');
+        this.hideMainMenu();
+        this.startGame();
     }
     
     startGame() {

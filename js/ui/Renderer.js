@@ -28,31 +28,40 @@ export class Renderer {
     }
     
     resizeCanvas() {
-        const container = this.canvas.parentElement;
-        const maxWidth = Math.max(container.clientWidth, 800); // Minimum 800px
-        const maxHeight = Math.max(container.clientHeight - 150, 600); // Minimum 600px
+        // Dans le nouveau layout, le canvas prend tout l'espace disponible
+        const container = this.canvas.parentElement; // game-layout
+        const gameUILeft = document.getElementById('game-ui-left');
+        
+        // Calculer l'espace disponible pour le canvas
+        const uiWidth = gameUILeft ? gameUILeft.offsetWidth : 280;
+        const availableWidth = window.innerWidth - uiWidth;
+        const availableHeight = window.innerHeight;
         
         const gridPixelWidth = GAME_CONFIG.GRID_WIDTH * GAME_CONFIG.CELL_SIZE;
         const gridPixelHeight = GAME_CONFIG.GRID_HEIGHT * GAME_CONFIG.CELL_SIZE;
         
-        // Calcul du scale pour ajustement - plus généreux
-        const scaleX = maxWidth / gridPixelWidth;
-        const scaleY = maxHeight / gridPixelHeight;
-        this.scale = Math.min(scaleX, scaleY, 1.5); // Scale maximum 1.5x
-        this.scale = Math.max(this.scale, 0.5); // Scale minimum 0.5x
+        // Calcul du scale pour ajustement
+        const scaleX = availableWidth / gridPixelWidth;
+        const scaleY = availableHeight / gridPixelHeight;
+        this.scale = Math.min(scaleX, scaleY, 1.2); // Scale maximum 1.2x
+        this.scale = Math.max(this.scale, 0.4); // Scale minimum 0.4x
         
-        this.canvas.width = gridPixelWidth * this.scale;
-        this.canvas.height = gridPixelHeight * this.scale;
+        // Le canvas utilise tout l'espace disponible
+        this.canvas.width = availableWidth;
+        this.canvas.height = availableHeight;
         
-        // Centrage
-        this.offsetX = 0;
-        this.offsetY = 0;
+        // Centrer la grille dans le canvas
+        const scaledGridWidth = gridPixelWidth * this.scale;
+        const scaledGridHeight = gridPixelHeight * this.scale;
+        this.offsetX = (availableWidth - scaledGridWidth) / 2;
+        this.offsetY = (availableHeight - scaledGridHeight) / 2;
         
         // Reset et redimensionnement du contexte
         this.ctx.resetTransform();
         this.ctx.scale(this.scale, this.scale);
+        this.ctx.translate(this.offsetX / this.scale, this.offsetY / this.scale);
         
-        console.log(`📏 Canvas resized: ${this.canvas.width}x${this.canvas.height} (scale: ${this.scale.toFixed(2)})`);
+        console.log(`📏 Canvas resized: ${this.canvas.width}x${this.canvas.height} (scale: ${this.scale.toFixed(2)}, offset: ${this.offsetX}, ${this.offsetY})`);
     }
     
     initParticles() {
@@ -150,18 +159,33 @@ export class Renderer {
     }
     
     getWaterColor(x, y) {
-        // Animation subtile de l'eau
-        const waveOffset = Math.sin(this.waveAnimTime + x * 0.1 + y * 0.1) * 10;
-        const variation = Math.sin(x * 0.05 + y * 0.03) * 20 + waveOffset;
+        // Animation naturelle de l'eau avec vagues et variation
+        const waveOffset = Math.sin(this.waveAnimTime + x * 0.1 + y * 0.1) * 15;
+        const ripple = Math.sin(this.waveAnimTime * 1.5 + x * 0.05 + y * 0.07) * 10;
+        const variation = Math.sin(x * 0.03 + y * 0.04) * 25 + waveOffset + ripple;
         
-        // Toujours retourner une teinte claire d'eau
+        // Retourner une belle variation animée entre eau claire et eau foncée
         return variation > 0 ? GAME_CONFIG.COLORS.WATER_LIGHT : GAME_CONFIG.COLORS.WATER;
     }
     
     getLandColor(x, y) {
-        // Variation subtile du terrain
-        const variation = Math.sin(x * 0.1 + y * 0.08) * 10;
-        return variation > 0 ? GAME_CONFIG.COLORS.LAND : GAME_CONFIG.COLORS.LAND_DARK;
+        // Motif damier pour la terre avec variation subtile
+        const isCheckerboard = (x + y) % 2 === 0;
+        const grassVariation = Math.sin(x * 0.15 + y * 0.12) * 8; // Variation plus naturelle
+        
+        if (isCheckerboard) {
+            // Cases claires - LAND #22c55e = rgb(34, 197, 94)
+            const r = Math.floor(34 + grassVariation);
+            const g = Math.floor(197 + grassVariation);
+            const b = Math.floor(94 + grassVariation);
+            return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
+        } else {
+            // Cases sombres - LAND_DARK #16a34a = rgb(22, 163, 74)
+            const r = Math.floor(22 + grassVariation);
+            const g = Math.floor(163 + grassVariation);
+            const b = Math.floor(74 + grassVariation);
+            return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
+        }
     }
     
     renderWaterEffects(x, y, size) {
@@ -413,10 +437,10 @@ export class Renderer {
     // Conversion coordonnées Canvas vers Grille
     screenToGrid(screenX, screenY) {
         const rect = this.canvas.getBoundingClientRect();
-        const canvasX = (screenX - rect.left) / this.scale;
-        const canvasY = (screenY - rect.top) / this.scale;
+        const canvasX = (screenX - rect.left) / this.scale - (this.offsetX / this.scale);
+        const canvasY = (screenY - rect.top) / this.scale - (this.offsetY / this.scale);
         
-        return UTILS.canvasToGrid(canvasX, canvasY, this.offsetX / this.scale, this.offsetY / this.scale);
+        return UTILS.canvasToGrid(canvasX, canvasY, 0, 0);
     }
     
     // Prévisualisation de placement

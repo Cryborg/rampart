@@ -207,8 +207,6 @@ export class GameManager {
     }
     
     startCombatPhase() {
-        this.showPhaseModal('COMBAT !', 'Détruisez tous les navires ennemis');
-        
         // Pas de limite de temps pour le combat !
         this.phaseTimeRemaining = null;
         
@@ -293,6 +291,16 @@ export class GameManager {
         } else {
             // Troupes terrestres vont vers la cible la plus proche (canons ou château)
             const nearestTarget = this.findNearestTargetForLandUnit(enemy.x, enemy.y);
+            
+            // Si c'est un tank et qu'il est à portée d'attaque, ne pas bouger
+            if (enemy.unitType === 'TANK') {
+                const distanceToTarget = Math.sqrt((nearestTarget.x - enemy.x) ** 2 + (nearestTarget.y - enemy.y) ** 2);
+                if (distanceToTarget <= enemy.range) {
+                    // Tank à portée, ne pas bouger
+                    return;
+                }
+            }
+            
             targetX = nearestTarget.x;
             targetY = nearestTarget.y;
         }
@@ -308,15 +316,45 @@ export class GameManager {
             
             // Anti-collision pour les navires
             if (enemy.type === 'ship') {
-                const collisionResult = this.checkShipCollisions(enemy, newX, newY);
-                if (!collisionResult.collision) {
-                    enemy.x = newX;
-                    enemy.y = newY;
+                // Vérifier que le navire ne va pas sur la terre
+                const gridX = Math.floor(newX);
+                const gridY = Math.floor(newY);
+                const targetCell = this.grid.getCell(gridX, gridY);
+                
+                // Navires avec évitement de collision
+                if (this.isValidTerrainForUnit(enemy, newX, newY)) {
+                    const collisionResult = this.checkUnitCollisions(enemy, newX, newY);
+                    if (!collisionResult.collision) {
+                        enemy.x = newX;
+                        enemy.y = newY;
+                    } else {
+                        // Calculer une trajectoire de contournement
+                        const avoidanceMove = this.calculateAvoidanceMove(enemy, newX, newY, collisionResult);
+                        if (avoidanceMove) {
+                            enemy.x = avoidanceMove.x;
+                            enemy.y = avoidanceMove.y;
+                        }
+                    }
                 }
-                // Si collision, rester sur place cette frame
+                // Si terrain invalide, rester sur place cette frame
             } else {
-                enemy.x = newX;
-                enemy.y = newY;
+                // Troupes terrestres avec évitement de collision
+                if (this.isValidTerrainForUnit(enemy, newX, newY)) {
+                    const collisionResult = this.checkUnitCollisions(enemy, newX, newY);
+                    if (!collisionResult.collision) {
+                        enemy.x = newX;
+                        enemy.y = newY;
+                    } else {
+                        // Calculer une trajectoire de contournement
+                        const avoidanceMove = this.calculateAvoidanceMove(enemy, newX, newY, collisionResult);
+                        if (avoidanceMove) {
+                            enemy.x = avoidanceMove.x;
+                            enemy.y = avoidanceMove.y;
+                        }
+                        // Si pas de mouvement d'évitement possible, rester sur place cette frame
+                    }
+                }
+                // Si terrain invalide, rester sur place cette frame
             }
         }
         
@@ -484,7 +522,7 @@ export class GameManager {
         const dx = targetPixelX - tankPixelX;
         const dy = targetPixelY - tankPixelY;
         const distance = Math.sqrt(dx*dx + dy*dy);
-        const speed = 200; // Vitesse des projectiles de tank
+        const speed = 260; // Vitesse des projectiles de tank (+30%)
         
         this.projectiles.push({
             x: tankPixelX,
@@ -526,7 +564,7 @@ export class GameManager {
         const dx = targetPixelX - enemyPixelX;
         const dy = targetPixelY - enemyPixelY;
         const distance = Math.sqrt(dx*dx + dy*dy);
-        const speed = 300; // Même vitesse que les projectiles de canons
+        const speed = 390; // Même vitesse que les projectiles de canons (+30%)
         
         this.projectiles.push({
             x: enemyPixelX,
@@ -694,7 +732,7 @@ export class GameManager {
         const dx = targetPixelX - cannonPixelX;
         const dy = targetPixelY - cannonPixelY;
         const distance = Math.sqrt(dx*dx + dy*dy);
-        const speed = 360; // pixels per second (+20%)
+        const speed = 468; // pixels per second (+30% de 360)
         
         // Vérifier si la cible est un mur
         const targetCell = this.grid.getCell(target.x, target.y);
@@ -816,14 +854,16 @@ export class GameManager {
         }
     }
     
-    checkShipCollisions(currentShip, newX, newY) {
-        const collisionRadius = 1.5; // Distance minimale entre navires
+    // Fonction générique de détection de collision pour tous types d'unités
+    checkUnitCollisions(currentUnit, newX, newY) {
+        const collisionRadius = currentUnit.type === 'ship' ? 1.5 : 1.0; // Navires plus gros
+        const unitTypes = currentUnit.type === 'ship' ? ['ship'] : ['land_unit']; // Même type seulement
         
         for (let i = 0; i < this.enemies.length; i++) {
             const otherEnemy = this.enemies[i];
             
-            // Ignorer soi-même et les troupes terrestres
-            if (otherEnemy === currentShip || otherEnemy.type !== 'ship') continue;
+            // Ignorer soi-même et les types différents
+            if (otherEnemy === currentUnit || !unitTypes.includes(otherEnemy.type)) continue;
             
             const dx = newX - otherEnemy.x;
             const dy = newY - otherEnemy.y;
@@ -833,12 +873,115 @@ export class GameManager {
                 return { 
                     collision: true, 
                     with: otherEnemy,
-                    distance: distance 
+                    distance: distance,
+                    obstacleX: otherEnemy.x,
+                    obstacleY: otherEnemy.y
                 };
             }
         }
         
         return { collision: false };
+    }
+    
+    // Fonction wrapper pour la compatibilité
+    checkShipCollisions(currentShip, newX, newY) {
+        return this.checkUnitCollisions(currentShip, newX, newY);
+    }
+    
+    // Fonction générique de calcul d'évitement pour tous types d'unités
+    calculateAvoidanceMove(unit, originalNewX, originalNewY, collisionResult) {
+        const speed = unit.speed;
+        const deltaTime = 16.67; // Approximation pour 60 FPS
+        
+        // Déterminer la cible selon le type d'unité
+        let targetDX, targetDY;
+        if (unit.type === 'ship') {
+            targetDX = unit.targetX - unit.x;
+            targetDY = unit.targetY - unit.y;
+        } else {
+            // Pour les troupes terrestres, utiliser la cible la plus proche
+            const nearestTarget = this.findNearestTargetForLandUnit(unit.x, unit.y);
+            targetDX = nearestTarget.x - unit.x;
+            targetDY = nearestTarget.y - unit.y;
+        }
+        
+        const targetDistance = Math.sqrt(targetDX * targetDX + targetDY * targetDY);
+        
+        if (targetDistance < 0.1) return null; // Déjà à destination
+        
+        // Vecteur normalisé vers la cible
+        const targetNormX = targetDX / targetDistance;
+        const targetNormY = targetDY / targetDistance;
+        
+        // Vecteur vers l'obstacle
+        const obstacleDX = collisionResult.obstacleX - unit.x;
+        const obstacleDY = collisionResult.obstacleY - unit.y;
+        
+        // Calculer l'angle de contournement (entre 15° et 45° selon la proximité)
+        const proximityFactor = Math.max(0.2, Math.min(1.0, collisionResult.distance / 2.0));
+        const avoidanceAngle = (Math.PI / 6) + (Math.PI / 12) * (1 - proximityFactor); // 30° à 45°
+        
+        // Déterminer le sens de contournement (droite ou gauche)
+        // Utiliser le produit croisé pour savoir de quel côté contourner
+        const crossProduct = targetNormX * obstacleDY - targetNormY * obstacleDX;
+        const turnDirection = crossProduct > 0 ? 1 : -1;
+        
+        // Calculer la nouvelle direction avec l'angle de contournement
+        const cos = Math.cos(avoidanceAngle * turnDirection);
+        const sin = Math.sin(avoidanceAngle * turnDirection);
+        
+        const newDirectionX = targetNormX * cos - targetNormY * sin;
+        const newDirectionY = targetNormX * sin + targetNormY * cos;
+        
+        // Calculer la nouvelle position
+        const moveDistance = speed * (deltaTime / 1000);
+        const avoidanceX = unit.x + newDirectionX * moveDistance;
+        const avoidanceY = unit.y + newDirectionY * moveDistance;
+        
+        // Vérifier que la nouvelle position est valide selon le type d'unité
+        if (this.isValidTerrainForUnit(unit, avoidanceX, avoidanceY)) {
+            const newCollisionResult = this.checkUnitCollisions(unit, avoidanceX, avoidanceY);
+            if (!newCollisionResult.collision) {
+                return { x: avoidanceX, y: avoidanceY };
+            }
+        }
+        
+        // Si le contournement principal échoue, essayer l'autre sens
+        const altDirectionX = targetNormX * cos + targetNormY * sin;
+        const altDirectionY = -targetNormX * sin + targetNormY * cos;
+        
+        const altAvoidanceX = unit.x + altDirectionX * moveDistance;
+        const altAvoidanceY = unit.y + altDirectionY * moveDistance;
+        
+        if (this.isValidTerrainForUnit(unit, altAvoidanceX, altAvoidanceY)) {
+            const altCollisionResult = this.checkUnitCollisions(unit, altAvoidanceX, altAvoidanceY);
+            if (!altCollisionResult.collision) {
+                return { x: altAvoidanceX, y: altAvoidanceY };
+            }
+        }
+        
+        // En dernier recours, rester sur place cette frame
+        return null;
+    }
+    
+    // Fonction pour vérifier si un terrain est valide pour un type d'unité
+    isValidTerrainForUnit(unit, x, y) {
+        const gridX = Math.floor(x);
+        const gridY = Math.floor(y);
+        const targetCell = this.grid.getCell(gridX, gridY);
+        
+        if (!targetCell) return false;
+        
+        if (unit.type === 'ship') {
+            // Les navires ne peuvent aller que sur l'eau
+            return targetCell.type === GAME_CONFIG.CELL_TYPES.WATER;
+        } else {
+            // Les troupes terrestres peuvent aller sur terre, terre détruite, canons et château
+            return targetCell.type === GAME_CONFIG.CELL_TYPES.LAND || 
+                   targetCell.type === GAME_CONFIG.CELL_TYPES.DESTROYED ||
+                   targetCell.type === GAME_CONFIG.CELL_TYPES.CANNON ||
+                   targetCell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE;
+        }
     }
     
     findNearestLandPosition(shipX, shipY) {
@@ -874,30 +1017,30 @@ export class GameManager {
         let nearestTarget = null;
         let minDistance = Infinity;
         
-        // 1. Chercher le château (priorité absolue)
+        // 1. Chercher les CANONS en priorité (plus stratégique)
         for (let y = 0; y < GAME_CONFIG.GRID_HEIGHT; y++) {
             for (let x = 0; x < GAME_CONFIG.GRID_WIDTH; x++) {
                 const cell = this.grid.getCell(x, y);
-                if (cell && cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE) {
+                if (cell && cell.type === GAME_CONFIG.CELL_TYPES.CANNON && cell.hp > 0) {
                     const distance = Math.sqrt((x - unitX) ** 2 + (y - unitY) ** 2);
                     if (distance < minDistance) {
                         minDistance = distance;
-                        nearestTarget = { x, y, type: 'castle' };
+                        nearestTarget = { x, y, type: 'cannon' };
                     }
                 }
             }
         }
         
-        // 2. Si pas de château trouvé, chercher les canons
+        // 2. Si pas de canons actifs, chercher le château
         if (!nearestTarget) {
             for (let y = 0; y < GAME_CONFIG.GRID_HEIGHT; y++) {
                 for (let x = 0; x < GAME_CONFIG.GRID_WIDTH; x++) {
                     const cell = this.grid.getCell(x, y);
-                    if (cell && cell.type === GAME_CONFIG.CELL_TYPES.CANNON && cell.hp > 0) {
+                    if (cell && cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE) {
                         const distance = Math.sqrt((x - unitX) ** 2 + (y - unitY) ** 2);
                         if (distance < minDistance) {
                             minDistance = distance;
-                            nearestTarget = { x, y, type: 'cannon' };
+                            nearestTarget = { x, y, type: 'castle' };
                         }
                     }
                 }
@@ -1263,17 +1406,65 @@ export class GameManager {
         const modal = document.getElementById('modal-overlay');
         const modalTitle = document.getElementById('modal-title');
         const modalMessage = document.getElementById('modal-message');
+        const modalButtons = document.getElementById('modal-buttons');
         
-        if (modal && modalTitle && modalMessage) {
+        if (modal && modalTitle && modalMessage && modalButtons) {
             if (this.isPaused) {
                 modalTitle.textContent = '⏸️ PAUSE';
-                modalMessage.textContent = 'Appuyez sur P ou Échap pour reprendre';
+                modalMessage.textContent = 'Jeu en pause - Que voulez-vous faire ?';
+                
+                modalButtons.innerHTML = `
+                    <button id="resume-btn">▶️ Reprendre</button>
+                    <button id="restart-btn">🔄 Recommencer</button>
+                    <button id="pause-return-menu-btn">🏠 Retour Menu</button>
+                `;
+                
+                // Ajouter les event listeners
+                document.getElementById('resume-btn')?.addEventListener('click', () => {
+                    this.togglePause();
+                });
+                
+                document.getElementById('restart-btn')?.addEventListener('click', () => {
+                    if (confirm('Êtes-vous sûr de vouloir recommencer la partie ?')) {
+                        location.reload();
+                    }
+                });
+                
+                document.getElementById('pause-return-menu-btn')?.addEventListener('click', () => {
+                    if (confirm('Êtes-vous sûr de vouloir retourner au menu ? La partie sera perdue.')) {
+                        this.returnToMainMenu();
+                    }
+                });
+                
                 modal.classList.remove('hidden', 'phase-announcement'); // Retirer la classe phase
             } else {
                 modal.classList.add('hidden');
                 modal.classList.remove('phase-announcement');
+                modalButtons.innerHTML = ''; // Nettoyer les boutons
             }
         }
+    }
+    
+    returnToMainMenu() {
+        // Arrêter le jeu
+        this.isGameRunning = false;
+        this.isPaused = false;
+        
+        // Masquer la modal
+        const modal = document.getElementById('modal-overlay');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+        
+        // Envoyer un signal à l'app principale pour retourner au menu
+        if (window.rampartApp && window.rampartApp.showMainMenu) {
+            window.rampartApp.showMainMenu();
+        } else {
+            // Fallback : recharger la page
+            location.reload();
+        }
+        
+        console.log('🏠 Returning to main menu...');
     }
     
     toggleDebugMode() {
@@ -1373,9 +1564,17 @@ export class GameManager {
             `;
             
             modalButtons.innerHTML = `
-                <button onclick="location.reload()">Rejouer</button>
-                <button onclick="window.parent.postMessage('return-to-arcade', '*')">Retour Menu</button>
+                <button onclick="location.reload()">🔄 Rejouer</button>
+                <button id="return-to-menu-btn">🏠 Retour Menu</button>
             `;
+            
+            // Ajouter l'event listener pour le bouton Retour Menu
+            const returnToMenuBtn = document.getElementById('return-to-menu-btn');
+            if (returnToMenuBtn) {
+                returnToMenuBtn.addEventListener('click', () => {
+                    this.returnToMainMenu();
+                });
+            }
             
             // S'assurer que Game Over a le fond sombre normal
             modal.classList.remove('hidden', 'phase-announcement');
