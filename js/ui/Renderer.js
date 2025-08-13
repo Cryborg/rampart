@@ -143,10 +143,7 @@ export class Renderer {
         this.ctx.fillStyle = color;
         this.ctx.fillRect(pixelX, pixelY, size, size);
         
-        // Effets spéciaux selon le type
-        if (cell.type === GAME_CONFIG.CELL_TYPES.WATER) {
-            this.renderWaterEffects(pixelX, pixelY, size);
-        }
+        // Les effets spéciaux de l'eau sont maintenant intégrés dans getWaterColor()
         
         if (cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE) {
             this.renderCastleCore(pixelX, pixelY, size);
@@ -159,12 +156,10 @@ export class Renderer {
     }
     
     getWaterColor(x, y) {
-        // Animation naturelle de l'eau avec vagues et variation
-        const waveOffset = Math.sin(this.waveAnimTime + x * 0.1 + y * 0.1) * 15;
-        const ripple = Math.sin(this.waveAnimTime * 1.5 + x * 0.05 + y * 0.07) * 10;
-        const variation = Math.sin(x * 0.03 + y * 0.04) * 25 + waveOffset + ripple;
+        // Eau statique avec légère variation pour éviter l'uniformité
+        const variation = Math.sin(x * 0.1 + y * 0.08) * 15;
         
-        // Retourner une belle variation animée entre eau claire et eau foncée
+        // Alternance simple entre eau claire et eau foncée selon la position
         return variation > 0 ? GAME_CONFIG.COLORS.WATER_LIGHT : GAME_CONFIG.COLORS.WATER;
     }
     
@@ -188,13 +183,6 @@ export class Renderer {
         }
     }
     
-    renderWaterEffects(x, y, size) {
-        // Effet de vagues subtiles
-        const waveIntensity = Math.sin(this.waveAnimTime * 2 + x * 0.02 + y * 0.03) * 0.1 + 0.1;
-        
-        this.ctx.fillStyle = `rgba(224, 242, 254, ${waveIntensity})`;
-        this.ctx.fillRect(x, y, size, size);
-    }
     
     renderCastleCore(x, y, size) {
         // Croix sur le château
