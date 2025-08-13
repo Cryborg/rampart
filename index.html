@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rampart - Arcade Defense</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- Interface de jeu -->
+        <div id="game-ui">
+            <div id="phase-display">
+                <h2 id="phase-title">RAMPART</h2>
+                <p id="phase-description">Prêt à défendre votre château ?</p>
+                <div id="phase-timer"></div>
+            </div>
+            
+            <div id="game-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Round:</span>
+                    <span class="stat-value" id="current-round">1</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Canons:</span>
+                    <span class="stat-value" id="cannons-remaining">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Score:</span>
+                    <span class="stat-value" id="player-score">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modales -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div id="modal-content" class="modal-content">
+                <h2 id="modal-title"></h2>
+                <p id="modal-message"></p>
+                <div id="modal-buttons"></div>
+            </div>
+        </div>
+        
+        <!-- Debug panel (temporaire) -->
+        <div id="debug-panel" class="debug-panel">
+            <h3>Debug Info</h3>
+            <div id="debug-content">
+                <p>État: <span id="debug-state">INIT</span></p>
+                <p>FPS: <span id="debug-fps">0</span></p>
+                <p>Grille: <span id="debug-grid">48x36</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="js/config/GameConstants.js"></script>
+    <script type="module" src="js/game/Grid.js"></script>
+    <script type="module" src="js/ui/Renderer.js"></script>
+    <script type="module" src="js/game/GameManager.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

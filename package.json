@@ -1,0 +1,18 @@
+{
+  "name": "rampart-v2",
+  "version": "1.0.0",
+  "description": "Rampart arcade game remake - Strategic real-time defense game",
+  "main": "index.html",
+  "scripts": {
+    "serve": "python3 -m http.server 8001",
+    "dev": "python3 -m http.server 8001"
+  },
+  "dependencies": {
+    "pathfinding": "^0.4.18",
+    "keyboardjs": "^2.7.0",
+    "sat": "^0.9.0"
+  },
+  "keywords": ["arcade", "game", "defense", "strategy", "rampart"],
+  "author": "Franck",
+  "license": "MIT"
+}
