@@ -167,11 +167,32 @@ export class MultiplayerGrid {
                 return cellData && cellData.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE && cellData.ownerId === playerId;
             });
             
+            // Vérifier si c'est une zone neutre (pas de château, mais fermée par des murs du joueur)
+            const isNeutralZone = !area.some(cell => {
+                const cellData = this.getCell(cell.x, cell.y);
+                return cellData && cellData.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE;
+            });
+            
+            // Vérifier si le joueur a construit des murs dans cette zone
+            const hasPlayerWalls = area.some(cell => {
+                const cellData = this.getCell(cell.x, cell.y);
+                return cellData && cellData.type === GAME_CONFIG.CELL_TYPES.WALL && cellData.ownerId === playerId;
+            });
+            
             if (belongsToPlayer) {
-                console.log(`📦 Zone fermée ${index + 1} appartient au joueur ${playerId}: ${area.length} cases`);
+                console.log(`📦 Zone fermée ${index + 1} appartient au joueur ${playerId} (château): ${area.length} cases`);
                 area.forEach(cell => {
                     const cellData = this.getCell(cell.x, cell.y);
-                    // Toutes les cases traversables dans une zone fermée peuvent accueillir des canons
+                    if (cellData && this.canPassThrough(cellData.type)) {
+                        cellData.cannonZone = true;
+                        cellData.cannonZoneOwnerId = playerId;
+                        totalConstructibleCells++;
+                    }
+                });
+            } else if (isNeutralZone && hasPlayerWalls) {
+                console.log(`📦 Zone fermée ${index + 1} capturable par joueur ${playerId} (murs): ${area.length} cases`);
+                area.forEach(cell => {
+                    const cellData = this.getCell(cell.x, cell.y);
                     if (cellData && this.canPassThrough(cellData.type)) {
                         cellData.cannonZone = true;
                         cellData.cannonZoneOwnerId = playerId;

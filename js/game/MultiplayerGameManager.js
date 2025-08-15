@@ -128,7 +128,7 @@ export class MultiplayerGameManager {
         
         // Empêcher les touches de navigation par défaut pour le Joueur 2
         document.addEventListener('keydown', (e) => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Backspace'].includes(e.code)) {
                 e.preventDefault();
             }
         });
@@ -1266,8 +1266,18 @@ export class MultiplayerGameManager {
     }
     
     handleMouseRightClick(event) {
-        if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player1) {
-            this.rotateTetrisPieceForPlayer(this.players[0]);
+        const gridPos = this.renderer.screenToGrid(event.clientX, event.clientY);
+        const player1 = this.players[0];
+        
+        switch (this.currentState) {
+            case GAME_CONFIG.GAME_STATES.PLACE_CANNONS:
+                this.tryRemoveCannonForPlayer(gridPos.x, gridPos.y, player1);
+                break;
+            case GAME_CONFIG.GAME_STATES.REPAIR:
+                if (this.tetrisPieces.player1) {
+                    this.rotateTetrisPieceForPlayer(player1);
+                }
+                break;
         }
     }
     
@@ -1346,6 +1356,9 @@ export class MultiplayerGameManager {
             case 'Enter':
                 this.handleKeyboardRotate(player2);
                 break;
+            case 'Backspace':
+                this.handleKeyboardRemove(player2);
+                break;
         }
     }
     
@@ -1395,6 +1408,15 @@ export class MultiplayerGameManager {
     handleKeyboardRotate(player2) {
         if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player2) {
             this.rotateTetrisPieceForPlayer(player2);
+        }
+    }
+    
+    handleKeyboardRemove(player2) {
+        const x = this.cursors.keyboard.x;
+        const y = this.cursors.keyboard.y;
+        
+        if (this.currentState === GAME_CONFIG.GAME_STATES.PLACE_CANNONS) {
+            this.tryRemoveCannonForPlayer(x, y, player2);
         }
     }
     
@@ -1496,6 +1518,47 @@ export class MultiplayerGameManager {
     // Méthode legacy pour compatibilité
     tryPlaceCannon(x, y) {
         return this.tryPlaceCannonForPlayer(x, y, this.currentPlayer || this.players[0]);
+    }
+    
+    tryRemoveCannonForPlayer(x, y, player) {
+        console.log(`🗑️ ${player.name} trying to remove cannon at (${x}, ${y})`);
+        
+        // Vérifier s'il y a un canon à cette position appartenant au joueur
+        const cell = this.grid.getCell(x, y);
+        if (!cell || cell.type !== GAME_CONFIG.CELL_TYPES.CANNON || cell.ownerId !== player.id) {
+            console.log(`❌ No cannon owned by ${player.name} at (${x}, ${y})`);
+            return false;
+        }
+        
+        // Trouver le canon dans la liste et le supprimer
+        const cannonIndex = this.cannons.findIndex(cannon => 
+            cannon.gridX === x && cannon.gridY === y && cannon.ownerId === player.id
+        );
+        
+        if (cannonIndex !== -1) {
+            this.cannons.splice(cannonIndex, 1);
+            console.log(`✅ Cannon removed from list`);
+        }
+        
+        // Supprimer le canon de la grille (2x2)
+        const size = GAME_CONFIG.GAMEPLAY.CANNON_SIZE;
+        for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+                const clearCell = this.grid.getCell(x + dx, y + dy);
+                if (clearCell && clearCell.type === GAME_CONFIG.CELL_TYPES.CANNON && clearCell.ownerId === player.id) {
+                    clearCell.type = GAME_CONFIG.CELL_TYPES.LAND;
+                    clearCell.entity = null;
+                    clearCell.hp = 1;
+                }
+            }
+        }
+        
+        // Rendre le canon au quota du joueur
+        player.cannonQuota++;
+        console.log(`✅ ${player.name} cannon removed, quota restored: ${player.cannonQuota}`);
+        
+        this.updateUI();
+        return true;
     }
     
     tryPlaceTetrisPieceForPlayer(x, y, player) {
@@ -1649,40 +1712,125 @@ export class MultiplayerGameManager {
     }
     
     checkRoundCompletion() {
-        // Nouvelle condition de Game Over : vérifier si des canons ou castle-core sont en zones dorées
-        const hasDefensesInGoldenZones = this.checkDefensesInGoldenZones();
+        // Vérifier si un joueur a perdu (pas de défenses en zones dorées)
+        const player1HasDefenses = this.checkPlayerDefenses(1);
+        const player2HasDefenses = this.checkPlayerDefenses(2);
         
-        if (hasDefensesInGoldenZones) {
-            // Continuer le round
-            this.transitionToState(GAME_CONFIG.GAME_STATES.ROUND_END);
+        if (!player1HasDefenses && !player2HasDefenses) {
+            // Match nul - les deux joueurs ont perdu
+            console.log('⚖️ DRAW: Both players lost their defenses!');
+            this.endGameWithResult('draw');
+        } else if (!player1HasDefenses) {
+            // Joueur 1 a perdu
+            console.log('💀 Player 1 defeated! Player 2 wins!');
+            this.endGameWithResult('player2_wins');
+        } else if (!player2HasDefenses) {
+            // Joueur 2 a perdu
+            console.log('💀 Player 2 defeated! Player 1 wins!');
+            this.endGameWithResult('player1_wins');
         } else {
-            // Game Over si aucune défense en zone dorée
-            console.log('💀 GAME OVER: No cannons or castle-core in golden zones!');
-            this.transitionToState(GAME_CONFIG.GAME_STATES.GAME_OVER);
+            // Les deux joueurs survivent, continuer le round
+            this.transitionToState(GAME_CONFIG.GAME_STATES.ROUND_END);
         }
     }
     
     checkDefensesInGoldenZones() {
-        // Parcourir toute la grille pour chercher canons et castle-cores en zones dorées
+        // Legacy method - utilise checkPlayerDefenses pour le multijoueur
+        return this.checkPlayerDefenses(1) || this.checkPlayerDefenses(2);
+    }
+    
+    checkPlayerDefenses(playerId) {
+        // Vérifier si un joueur spécifique a des défenses en zones dorées
         for (let y = 0; y < GAME_CONFIG.GRID_HEIGHT; y++) {
             for (let x = 0; x < GAME_CONFIG.GRID_WIDTH; x++) {
                 const cell = this.grid.getCell(x, y);
-                if (cell && cell.cannonZone) {
-                    // Cette cellule est une zone dorée, vérifier s'il y a une défense
-                    if (cell.type === GAME_CONFIG.CELL_TYPES.CANNON && cell.hp > 0) {
-                        console.log(`✅ Active cannon found in golden zone at (${x}, ${y})`);
+                if (cell && cell.cannonZone && cell.cannonZoneOwnerId === playerId) {
+                    // Cette cellule est une zone dorée du joueur, vérifier s'il y a une défense
+                    if (cell.type === GAME_CONFIG.CELL_TYPES.CANNON && cell.hp > 0 && cell.ownerId === playerId) {
+                        console.log(`✅ Player ${playerId} has active cannon in golden zone at (${x}, ${y})`);
                         return true;
                     }
-                    if (cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE) {
-                        console.log(`🏰 Castle-core found in golden zone at (${x}, ${y})`);
+                    if (cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE && cell.ownerId === playerId) {
+                        console.log(`🏰 Player ${playerId} castle-core found in golden zone at (${x}, ${y})`);
                         return true;
                     }
                 }
             }
         }
         
-        console.log('❌ No defenses found in golden zones');
+        console.log(`❌ Player ${playerId} has no defenses in their golden zones`);
         return false;
+    }
+    
+    endGameWithResult(result) {
+        this.transitionToState(GAME_CONFIG.GAME_STATES.GAME_OVER);
+        this.gameResult = result;
+        this.showMultiplayerEndModal();
+    }
+    
+    showMultiplayerEndModal() {
+        const modal = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalButtons = document.getElementById('modal-buttons');
+        
+        if (modal && modalTitle && modalMessage && modalButtons) {
+            let title, message;
+            
+            switch (this.gameResult) {
+                case 'player1_wins':
+                    title = '🎉 VICTOIRE JOUEUR 1 !';
+                    message = `
+                        <div style="text-align: center;">
+                            <h3 style="color: #3b82f6;">🟦 ${this.players[0].name} remporte la partie !</h3>
+                            <p><strong>Score:</strong> ${this.players[0].score} vs ${this.players[1].score}</p>
+                            <p><strong>Rounds complétés:</strong> ${this.currentRound}</p>
+                            <p><strong>Canons posés:</strong> ${this.players[0].cannonsPlaced} vs ${this.players[1].cannonsPlaced}</p>
+                        </div>
+                    `;
+                    break;
+                case 'player2_wins':
+                    title = '🎉 VICTOIRE JOUEUR 2 !';
+                    message = `
+                        <div style="text-align: center;">
+                            <h3 style="color: #ef4444;">🟥 ${this.players[1].name} remporte la partie !</h3>
+                            <p><strong>Score:</strong> ${this.players[1].score} vs ${this.players[0].score}</p>
+                            <p><strong>Rounds complétés:</strong> ${this.currentRound}</p>
+                            <p><strong>Canons posés:</strong> ${this.players[1].cannonsPlaced} vs ${this.players[0].cannonsPlaced}</p>
+                        </div>
+                    `;
+                    break;
+                case 'draw':
+                    title = '⚖️ MATCH NUL !';
+                    message = `
+                        <div style="text-align: center;">
+                            <h3>Les deux joueurs ont perdu leurs défenses !</h3>
+                            <p><strong>Score final:</strong> ${this.players[0].score} vs ${this.players[1].score}</p>
+                            <p><strong>Rounds complétés:</strong> ${this.currentRound}</p>
+                        </div>
+                    `;
+                    break;
+            }
+            
+            modalTitle.textContent = title;
+            modalMessage.innerHTML = message;
+            
+            modalButtons.innerHTML = `
+                <button onclick="location.reload()">🔄 Rejouer</button>
+                <button id="return-to-menu-btn">🏠 Retour Menu</button>
+            `;
+            
+            // Event listener pour retour menu
+            const returnToMenuBtn = document.getElementById('return-to-menu-btn');
+            if (returnToMenuBtn) {
+                returnToMenuBtn.addEventListener('click', () => {
+                    this.returnToMainMenu();
+                });
+            }
+            
+            modal.classList.remove('hidden', 'phase-announcement');
+            modal.classList.add('show');
+        }
     }
     
     togglePause() {

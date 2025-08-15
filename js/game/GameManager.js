@@ -1205,8 +1205,17 @@ export class GameManager {
     }
     
     handleMouseRightClick(event) {
-        if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.currentTetrisPiece) {
-            this.rotateTetrisPiece();
+        const gridPos = this.renderer.screenToGrid(event.clientX, event.clientY);
+        
+        switch (this.currentState) {
+            case GAME_CONFIG.GAME_STATES.PLACE_CANNONS:
+                this.tryRemoveCannon(gridPos.x, gridPos.y);
+                break;
+            case GAME_CONFIG.GAME_STATES.REPAIR:
+                if (this.currentTetrisPiece) {
+                    this.rotateTetrisPiece();
+                }
+                break;
         }
     }
     
@@ -1333,6 +1342,47 @@ export class GameManager {
         
         console.log('❌ Cannot place cannon at', x, y);
         return false;
+    }
+    
+    tryRemoveCannon(x, y) {
+        console.log(`🗑️ Trying to remove cannon at (${x}, ${y})`);
+        
+        // Vérifier s'il y a un canon à cette position
+        const cell = this.grid.getCell(x, y);
+        if (!cell || cell.type !== GAME_CONFIG.CELL_TYPES.CANNON) {
+            console.log(`❌ No cannon at (${x}, ${y})`);
+            return false;
+        }
+        
+        // Trouver le canon dans la liste et le supprimer
+        const cannonIndex = this.cannons.findIndex(cannon => 
+            cannon.gridX === x && cannon.gridY === y
+        );
+        
+        if (cannonIndex !== -1) {
+            this.cannons.splice(cannonIndex, 1);
+            console.log(`✅ Cannon removed from list`);
+        }
+        
+        // Supprimer le canon de la grille (2x2)
+        const size = GAME_CONFIG.GAMEPLAY.CANNON_SIZE;
+        for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+                const clearCell = this.grid.getCell(x + dx, y + dy);
+                if (clearCell && clearCell.type === GAME_CONFIG.CELL_TYPES.CANNON) {
+                    clearCell.type = GAME_CONFIG.CELL_TYPES.LAND;
+                    clearCell.entity = null;
+                    clearCell.hp = 1;
+                }
+            }
+        }
+        
+        // Rendre le canon au quota du joueur
+        this.currentPlayer.cannonQuota++;
+        console.log(`✅ Cannon removed, quota restored: ${this.currentPlayer.cannonQuota}`);
+        
+        this.updateUI();
+        return true;
     }
     
     tryPlaceTetrisPiece(x, y) {
