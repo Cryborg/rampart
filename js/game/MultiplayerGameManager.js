@@ -15,9 +15,9 @@ export class MultiplayerGameManager {
         this.isGameRunning = false;
         this.isPaused = false;
         
-        // Gestion du tour par tour
-        this.currentPlayerIndex = 0;
-        this.turnPhase = 'CANNON_P1'; // CANNON_P1, CANNON_P2, COMBAT, REPAIR_P1, REPAIR_P2
+        // Gestion multijoueur simultané
+        this.activePlayer = null; // Joueur actuellement actif pour le preview (souris ou clavier)
+        this.lastActiveDevice = 'mouse'; // Pour déterminer quel joueur a le preview
         
         // Timers
         this.phaseTimer = null;
@@ -44,9 +44,21 @@ export class MultiplayerGameManager {
             gameStartTime: null
         };
         
-        // Curseur et interaction
-        this.cursorPosition = { x: 0, y: 0 };
-        this.previewPosition = null;
+        // Curseurs et interactions multijoueur
+        this.cursors = {
+            mouse: { x: 0, y: 0, player: this.players[0] },
+            keyboard: { x: 24, y: 18, player: this.players[1] } // Commence au centre
+        };
+        this.previews = {
+            mouse: null,
+            keyboard: null
+        };
+        
+        // Pièces Tetris pour chaque joueur
+        this.tetrisPieces = {
+            player1: null,
+            player2: null
+        };
         
         this.initializeGame();
         this.bindEvents();
@@ -102,7 +114,7 @@ export class MultiplayerGameManager {
     }
     
     bindEvents() {
-        // Événements souris
+        // Événements souris (Joueur 1)
         this.canvas.addEventListener('click', (e) => this.handleMouseClick(e));
         this.canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -110,9 +122,16 @@ export class MultiplayerGameManager {
         });
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         
-        // Événements clavier
+        // Événements clavier (Joueur 2 + touches globales)
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+        
+        // Empêcher les touches de navigation par défaut pour le Joueur 2
+        document.addEventListener('keydown', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) {
+                e.preventDefault();
+            }
+        });
     }
     
     // Démarrer le rendu (séparé du gameplay)
@@ -164,8 +183,11 @@ export class MultiplayerGameManager {
             enemies: this.enemies,
             projectiles: this.projectiles,
             currentState: this.currentState,
-            cursorPosition: this.cursorPosition,
-            previewPosition: this.previewPosition
+            cursors: this.cursors,
+            previews: this.previews,
+            // Legacy pour compatibilité
+            cursorPosition: this.cursors.mouse,
+            previewPosition: this.previews.mouse || this.previews.keyboard
         };
         
         this.renderer.render(gameState);
@@ -212,16 +234,18 @@ export class MultiplayerGameManager {
     
     // PHASES DU JEU
     startPlaceCanonsPhase() {
-        // Gérer l'alternance des joueurs pour le placement des canons
-        if (this.turnPhase === 'CANNON_P1') {
-            this.currentPlayer = this.players[0];
-            this.showPhaseModal(`${this.currentPlayer.name} - CANONS`, 'Placez vos canons dans vos zones dorées (bleues)');
-            console.log(`🔫 ${this.currentPlayer.name} cannon phase - Quota:`, this.currentPlayer.cannonQuota);
-        } else if (this.turnPhase === 'CANNON_P2') {
-            this.currentPlayer = this.players[1];
-            this.showPhaseModal(`${this.currentPlayer.name} - CANONS`, 'Placez vos canons dans vos zones dorées (rouges)');
-            console.log(`🔫 ${this.currentPlayer.name} cannon phase - Quota:`, this.currentPlayer.cannonQuota);
-        }
+        this.showPhaseModal('PLACEMENT DES CANONS', 'Les deux joueurs placent leurs canons simultanément !');
+        
+        // Recalculer les zones pour chaque joueur
+        const goldenCellsP1 = this.grid.updateCannonZones(1);
+        this.players[0].cannonQuota = this.grid.calculateCannonQuota(goldenCellsP1);
+        
+        const goldenCellsP2 = this.grid.updateCannonZones(2);
+        this.players[1].cannonQuota = this.grid.calculateCannonQuota(goldenCellsP2);
+        
+        console.log('🔫 Simultaneous Cannon Phase');
+        console.log(`🟦 ${this.players[0].name} quota:`, this.players[0].cannonQuota);
+        console.log(`🟥 ${this.players[1].name} quota:`, this.players[1].cannonQuota);
     }
     
     startCombatPhase() {
@@ -235,15 +259,16 @@ export class MultiplayerGameManager {
     }
     
     startRepairPhase() {
-        this.showPhaseModal('RÉPARATIONS', 'Réparez vos murs avec les pièces Tetris');
+        this.showPhaseModal('RÉPARATIONS', 'Les deux joueurs réparent leurs murs simultanément !');
         
-        // Générer une pièce Tetris
-        this.generateTetrisPiece();
+        // Générer une pièce Tetris pour chaque joueur
+        this.generateTetrisPieceForPlayer(1);
+        this.generateTetrisPieceForPlayer(2);
         
         // Timer de réparation (15 secondes) - géré dans updateTimers
         this.phaseTimeRemaining = GAME_CONFIG.TIMERS.REPAIR_PHASE;
         
-        console.log('🔧 Repair Phase started');
+        console.log('🔧 Simultaneous Repair Phase started');
     }
     
     startRoundEndPhase() {
@@ -1197,70 +1222,87 @@ export class MultiplayerGameManager {
     }
     
     generateTetrisPiece() {
+        // Méthode legacy pour compatibilité, génère pour player1
+        this.generateTetrisPieceForPlayer(1);
+    }
+    
+    generateTetrisPieceForPlayer(playerId) {
         const pieces = GAME_CONFIG.TETRIS_PIECES.TYPES;
         const randomPiece = pieces[Math.floor(Math.random() * pieces.length)];
         
-        this.currentTetrisPiece = {
+        const tetrisPiece = {
             ...randomPiece,
             x: Math.floor(GAME_CONFIG.GRID_WIDTH / 2),
             y: Math.floor(GAME_CONFIG.GRID_HEIGHT / 2),
             rotation: 0
         };
         
-        console.log('🧩 Generated Tetris piece:', this.currentTetrisPiece.name);
+        if (playerId === 1) {
+            this.tetrisPieces.player1 = tetrisPiece;
+            this.currentTetrisPiece = tetrisPiece; // Pour compatibilité
+        } else {
+            this.tetrisPieces.player2 = tetrisPiece;
+        }
+        
+        console.log(`🧩 Generated Tetris piece for Player ${playerId}:`, tetrisPiece.name);
     }
     
     // GESTION DES INPUTS
     handleMouseClick(event) {
         const gridPos = this.renderer.screenToGrid(event.clientX, event.clientY);
+        const player1 = this.players[0];
         
         switch (this.currentState) {
             case GAME_CONFIG.GAME_STATES.PLACE_CANNONS:
-                this.tryPlaceCannon(gridPos.x, gridPos.y);
+                this.tryPlaceCannonForPlayer(gridPos.x, gridPos.y, player1);
                 break;
             case GAME_CONFIG.GAME_STATES.REPAIR:
-                this.tryPlaceTetrisPiece(gridPos.x, gridPos.y);
+                this.tryPlaceTetrisPieceForPlayer(gridPos.x, gridPos.y, player1);
                 break;
             case GAME_CONFIG.GAME_STATES.COMBAT:
-                this.tryManualFire(gridPos.x, gridPos.y);
+                this.tryManualFireForPlayer(gridPos.x, gridPos.y, player1);
                 break;
         }
     }
     
     handleMouseRightClick(event) {
-        if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.currentTetrisPiece) {
-            this.rotateTetrisPiece();
+        if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player1) {
+            this.rotateTetrisPieceForPlayer(this.players[0]);
         }
     }
     
     handleMouseMove(event) {
         const gridPos = this.renderer.screenToGrid(event.clientX, event.clientY);
-        this.cursorPosition = gridPos;
+        this.cursors.mouse.x = gridPos.x;
+        this.cursors.mouse.y = gridPos.y;
+        this.lastActiveDevice = 'mouse';
         
-        
-        // Preview de placement
+        // Preview pour Joueur 1 (souris)
+        const player1 = this.players[0];
         if (this.currentState === GAME_CONFIG.GAME_STATES.PLACE_CANNONS) {
-            this.previewPosition = {
+            this.previews.mouse = {
                 x: gridPos.x,
                 y: gridPos.y,
                 size: GAME_CONFIG.GAMEPLAY.CANNON_SIZE,
-                valid: this.grid.canPlaceCannon(gridPos.x, gridPos.y, this.currentPlayer.id),
-                cannonQuota: this.currentPlayer.cannonQuota
+                valid: this.grid.canPlaceCannon(gridPos.x, gridPos.y, player1.id),
+                cannonQuota: player1.cannonQuota,
+                playerId: player1.id
             };
-        } else if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.currentTetrisPiece) {
-            this.previewPosition = {
+        } else if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player1) {
+            this.previews.mouse = {
                 x: gridPos.x,
                 y: gridPos.y,
-                piece: this.currentTetrisPiece,
-                valid: this.grid.canPlacePiece(this.currentTetrisPiece, gridPos.x, gridPos.y)
+                piece: this.tetrisPieces.player1,
+                valid: this.grid.canPlacePiece(this.tetrisPieces.player1, gridPos.x, gridPos.y),
+                playerId: player1.id
             };
-            console.log(`🧩 Tetris preview at (${gridPos.x}, ${gridPos.y}) - Valid: ${this.previewPosition.valid}`);
         } else {
-            this.previewPosition = null;
+            this.previews.mouse = null;
         }
     }
     
     handleKeyDown(event) {
+        // Touches globales
         switch (event.code) {
             case GAME_CONFIG.CONTROLS.GLOBAL.PAUSE:
                 this.togglePause();
@@ -1274,24 +1316,103 @@ export class MultiplayerGameManager {
                 this.toggleDebugMode();
                 break;
         }
+        
+        // Contrôles Joueur 2 (clavier)
+        const player2 = this.players[1];
+        switch (event.code) {
+            case 'ArrowUp':
+                this.cursors.keyboard.y = Math.max(0, this.cursors.keyboard.y - 1);
+                this.lastActiveDevice = 'keyboard';
+                this.updateKeyboardPreview(player2);
+                break;
+            case 'ArrowDown':
+                this.cursors.keyboard.y = Math.min(GAME_CONFIG.GRID_HEIGHT - 1, this.cursors.keyboard.y + 1);
+                this.lastActiveDevice = 'keyboard';
+                this.updateKeyboardPreview(player2);
+                break;
+            case 'ArrowLeft':
+                this.cursors.keyboard.x = Math.max(0, this.cursors.keyboard.x - 1);
+                this.lastActiveDevice = 'keyboard';
+                this.updateKeyboardPreview(player2);
+                break;
+            case 'ArrowRight':
+                this.cursors.keyboard.x = Math.min(GAME_CONFIG.GRID_WIDTH - 1, this.cursors.keyboard.x + 1);
+                this.lastActiveDevice = 'keyboard';
+                this.updateKeyboardPreview(player2);
+                break;
+            case 'Space':
+                this.handleKeyboardAction(player2);
+                break;
+            case 'Enter':
+                this.handleKeyboardRotate(player2);
+                break;
+        }
+    }
+    
+    updateKeyboardPreview(player2) {
+        const x = this.cursors.keyboard.x;
+        const y = this.cursors.keyboard.y;
+        
+        if (this.currentState === GAME_CONFIG.GAME_STATES.PLACE_CANNONS) {
+            this.previews.keyboard = {
+                x: x,
+                y: y,
+                size: GAME_CONFIG.GAMEPLAY.CANNON_SIZE,
+                valid: this.grid.canPlaceCannon(x, y, player2.id),
+                cannonQuota: player2.cannonQuota,
+                playerId: player2.id
+            };
+        } else if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player2) {
+            this.previews.keyboard = {
+                x: x,
+                y: y,
+                piece: this.tetrisPieces.player2,
+                valid: this.grid.canPlacePiece(this.tetrisPieces.player2, x, y),
+                playerId: player2.id
+            };
+        } else {
+            this.previews.keyboard = null;
+        }
+    }
+    
+    handleKeyboardAction(player2) {
+        const x = this.cursors.keyboard.x;
+        const y = this.cursors.keyboard.y;
+        
+        switch (this.currentState) {
+            case GAME_CONFIG.GAME_STATES.PLACE_CANNONS:
+                this.tryPlaceCannonForPlayer(x, y, player2);
+                break;
+            case GAME_CONFIG.GAME_STATES.REPAIR:
+                this.tryPlaceTetrisPieceForPlayer(x, y, player2);
+                break;
+            case GAME_CONFIG.GAME_STATES.COMBAT:
+                this.tryManualFireForPlayer(x, y, player2);
+                break;
+        }
+    }
+    
+    handleKeyboardRotate(player2) {
+        if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player2) {
+            this.rotateTetrisPieceForPlayer(player2);
+        }
     }
     
     handleKeyUp(event) {
         // Gestion des touches relâchées si nécessaire
     }
     
-    // ACTIONS DE JEU
-    tryManualFire(x, y) {
-        console.log(`🎯 Manual fire attempt at (${x}, ${y})`);
+    // ACTIONS DE JEU - Nouvelles méthodes pour multijoueur
+    tryManualFireForPlayer(x, y, player) {
+        console.log(`🎯 ${player.name} fire attempt at (${x}, ${y})`);
         
-        // Trouver le canon le plus proche du clic qui peut tirer
+        // Trouver le canon le plus proche appartenant à ce joueur
         let closestCannon = null;
         let minDistance = Infinity;
         let availableCannons = 0;
         
         this.cannons.forEach(cannon => {
-            console.log(`⚡ Cannon at (${cannon.gridX}, ${cannon.gridY}) - Cooldown: ${cannon.cooldown}ms`);
-            if (cannon.cooldown <= 0) {
+            if (cannon.ownerId === player.id && cannon.cooldown <= 0) {
                 availableCannons++;
                 const distance = Math.sqrt(
                     (cannon.gridX - x) ** 2 + (cannon.gridY - y) ** 2
@@ -1303,96 +1424,161 @@ export class MultiplayerGameManager {
             }
         });
         
-        console.log(`📊 ${availableCannons} cannons available, closest at distance ${minDistance.toFixed(2)}`);
-        
         if (closestCannon) {
-            // Créer une cible virtuelle à l'endroit du clic
             const target = { x, y };
-            console.log(`🔥 Firing cannon at (${closestCannon.gridX}, ${closestCannon.gridY}) toward (${x}, ${y})`);
+            console.log(`🔥 ${player.name} firing cannon toward (${x}, ${y})`);
             this.fireCannon(closestCannon, target);
-            closestCannon.cooldown = 2000; // 2 secondes de cooldown
+            closestCannon.cooldown = 2000;
         } else {
-            console.log(`❌ No cannon available to fire (all on cooldown)`);
+            console.log(`❌ ${player.name}: No cannon available to fire`);
         }
     }
     
-    tryPlaceCannon(x, y) {
-        if (this.currentPlayer.cannonQuota <= 0) {
-            console.log('❌ No more cannons available!');
+    // Méthode legacy pour compatibilité
+    tryManualFire(x, y) {
+        this.tryManualFireForPlayer(x, y, this.players[0]);
+    }
+    
+    tryPlaceCannonForPlayer(x, y, player) {
+        if (player.cannonQuota <= 0) {
+            console.log(`❌ ${player.name}: No more cannons available!`);
             return false;
         }
         
-        
-        if (this.grid.canPlaceCannon(x, y, this.currentPlayer.id)) {
+        if (this.grid.canPlaceCannon(x, y, player.id)) {
             const cannonData = {
-                id: `cannon_${Date.now()}`,
-                ownerId: this.currentPlayer.id,
+                id: `cannon_${Date.now()}_p${player.id}`,
+                ownerId: player.id,
                 hp: 3,
                 maxHP: 3,
                 cooldown: 0,
                 rotation: 0
             };
             
-            if (this.grid.placeCannon(x, y, cannonData, this.currentPlayer.id)) {
+            if (this.grid.placeCannon(x, y, cannonData, player.id)) {
                 this.cannons.push({
                     ...cannonData,
                     gridX: x,
                     gridY: y
                 });
                 
-                this.currentPlayer.cannonQuota--;
-                console.log('✅ Cannon placed at', x, y, '- Remaining:', this.currentPlayer.cannonQuota);
+                player.cannonQuota--;
+                console.log(`✅ ${player.name} placed cannon at (${x}, ${y}) - Remaining: ${player.cannonQuota}`);
                 
-                // Transition automatique si quota épuisé
-                if (this.currentPlayer.cannonQuota <= 0) {
-                    setTimeout(() => {
-                        this.transitionToState(GAME_CONFIG.GAME_STATES.COMBAT);
-                    }, 500);
+                // Vérifier si tous les joueurs ont épuisé leur quota
+                this.checkCannonPhaseCompletion();
+                
+                return true;
+            }
+        }
+        
+        console.log(`❌ ${player.name} cannot place cannon at (${x}, ${y})`);
+        return false;
+    }
+    
+    checkCannonPhaseCompletion() {
+        // Vérifier si les 2 joueurs ont épuisé leur quota ou si temps écoulé
+        const totalQuotaRemaining = this.players[0].cannonQuota + this.players[1].cannonQuota;
+        
+        if (totalQuotaRemaining <= 0) {
+            console.log('🚀 All players finished placing cannons - Starting combat!');
+            setTimeout(() => {
+                this.transitionToState(GAME_CONFIG.GAME_STATES.COMBAT);
+            }, 500);
+        }
+    }
+    
+    // Méthode legacy pour compatibilité
+    tryPlaceCannon(x, y) {
+        return this.tryPlaceCannonForPlayer(x, y, this.currentPlayer || this.players[0]);
+    }
+    
+    tryPlaceTetrisPieceForPlayer(x, y, player) {
+        const piece = player.id === 1 ? this.tetrisPieces.player1 : this.tetrisPieces.player2;
+        
+        if (!piece) return false;
+        
+        if (this.grid.canPlacePiece(piece, x, y)) {
+            if (this.grid.placePiece(piece, x, y, player.id)) {
+                console.log(`✅ ${player.name} placed Tetris piece at (${x}, ${y})`);
+                
+                // Supprimer la pièce placée
+                if (player.id === 1) {
+                    this.tetrisPieces.player1 = null;
+                    this.currentTetrisPiece = null; // Pour compatibilité
+                } else {
+                    this.tetrisPieces.player2 = null;
                 }
                 
+                // Recalculer les zones fermées pour ce joueur
+                const goldenCells = this.grid.updateCannonZones(player.id);
+                console.log(`🔍 ${player.name} zones updated:`, goldenCells, 'golden cells');
+                
+                // Générer nouvelle pièce après un délai
+                setTimeout(() => this.generateTetrisPieceForPlayer(player.id), 100);
                 return true;
             }
         }
         
-        console.log('❌ Cannot place cannon at', x, y);
+        console.log(`❌ ${player.name} cannot place piece at (${x}, ${y})`);
         return false;
     }
     
+    // Méthode legacy pour compatibilité
     tryPlaceTetrisPiece(x, y) {
-        if (!this.currentTetrisPiece) return false;
-        
-        if (this.grid.canPlacePiece(this.currentTetrisPiece, x, y)) {
-            if (this.grid.placePiece(this.currentTetrisPiece, x, y, this.currentPlayer.id)) {
-                console.log('✅ Tetris piece placed at', x, y);
-                this.currentTetrisPiece = null;
-                
-                // Recalculer les zones fermées immédiatement après la pose
-                const goldenCells = this.grid.updateCannonZones(this.currentPlayer.id);
-                console.log('🔍 Zones mises à jour après pose:', goldenCells, 'cases dorées');
-                
-                // Générer nouvelle pièce
-                setTimeout(() => this.generateTetrisPiece(), 100);
-                return true;
-            }
-        }
-        
-        console.log('❌ Cannot place piece at', x, y);
-        return false;
+        return this.tryPlaceTetrisPieceForPlayer(x, y, this.currentPlayer || this.players[0]);
     }
     
-    rotateTetrisPiece() {
-        if (!this.currentTetrisPiece) return;
+    rotateTetrisPieceForPlayer(player) {
+        const piece = player.id === 1 ? this.tetrisPieces.player1 : this.tetrisPieces.player2;
+        
+        if (!piece) return;
         
         // Rotation 90° dans le sens horaire
-        const pattern = this.currentTetrisPiece.pattern;
+        const pattern = piece.pattern;
         const rotated = pattern[0].map((_, index) => 
             pattern.map(row => row[index]).reverse()
         );
         
-        this.currentTetrisPiece.pattern = rotated;
-        this.currentTetrisPiece.rotation = (this.currentTetrisPiece.rotation + 90) % 360;
+        piece.pattern = rotated;
+        piece.rotation = (piece.rotation + 90) % 360;
         
-        console.log('🔄 Piece rotated');
+        console.log(`🔄 ${player.name} rotated Tetris piece`);
+        
+        // Mettre à jour le preview après rotation
+        if (player.id === 1) {
+            this.updateMousePreview();
+        } else {
+            this.updateKeyboardPreview(player);
+        }
+    }
+    
+    updateMousePreview() {
+        const player1 = this.players[0];
+        const x = this.cursors.mouse.x;
+        const y = this.cursors.mouse.y;
+        
+        if (this.currentState === GAME_CONFIG.GAME_STATES.PLACE_CANNONS) {
+            this.previews.mouse = {
+                x: x, y: y,
+                size: GAME_CONFIG.GAMEPLAY.CANNON_SIZE,
+                valid: this.grid.canPlaceCannon(x, y, player1.id),
+                cannonQuota: player1.cannonQuota,
+                playerId: player1.id
+            };
+        } else if (this.currentState === GAME_CONFIG.GAME_STATES.REPAIR && this.tetrisPieces.player1) {
+            this.previews.mouse = {
+                x: x, y: y,
+                piece: this.tetrisPieces.player1,
+                valid: this.grid.canPlacePiece(this.tetrisPieces.player1, x, y),
+                playerId: player1.id
+            };
+        }
+    }
+    
+    // Méthode legacy pour compatibilité
+    rotateTetrisPiece() {
+        this.rotateTetrisPieceForPlayer(this.players[0]);
     }
     
     // UTILITAIRES

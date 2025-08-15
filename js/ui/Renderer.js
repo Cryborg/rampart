@@ -87,8 +87,15 @@ export class Renderer {
             this.renderEntities(gameState);
             this.renderEffects();
             
-            // Rendu du preview APRÈS tout le reste
-            this.renderPreview(gameState.previewPosition);
+            // Rendu des previews APRÈS tout le reste
+            // Multijoueur : utiliser l'objet previews complet
+            if (gameState.previews) {
+                this.renderPreview(gameState.previews);
+            } 
+            // Legacy : utiliser previewPosition
+            else if (gameState.previewPosition) {
+                this.renderPreview(gameState.previewPosition);
+            }
         }
         
         this.updateFPS();
@@ -567,37 +574,55 @@ export class Renderer {
         return UTILS.canvasToGrid(canvasX, canvasY, 0, 0);
     }
     
-    // Prévisualisation de placement
-    renderPlacementPreview(x, y, size, valid, cannonQuota = null) {
+    // Prévisualisation de placement avec couleur joueur
+    renderPlacementPreview(x, y, size, valid, cannonQuota = null, playerColor = null) {
         const pixelX = x * GAME_CONFIG.CELL_SIZE;
         const pixelY = y * GAME_CONFIG.CELL_SIZE;
         const cellSize = GAME_CONFIG.CELL_SIZE;
         const totalSize = cellSize * size;
         
+        // Couleur selon validité et joueur
+        let fillColor, strokeColor;
+        if (playerColor) {
+            if (valid) {
+                // Couleur du joueur avec transparence
+                const rgb = this.hexToRgb(playerColor);
+                fillColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
+                strokeColor = playerColor;
+            } else {
+                fillColor = 'rgba(239, 68, 68, 0.5)';
+                strokeColor = '#ef4444';
+            }
+        } else {
+            // Couleurs par défaut
+            fillColor = valid ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+            strokeColor = valid ? '#22c55e' : '#ef4444';
+        }
+        
         // Rectangle de preview
-        this.ctx.fillStyle = valid ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+        this.ctx.fillStyle = fillColor;
         this.ctx.fillRect(pixelX, pixelY, totalSize, totalSize);
         
-        this.ctx.strokeStyle = valid ? '#22c55e' : '#ef4444';
-        this.ctx.lineWidth = 2;
+        this.ctx.strokeStyle = strokeColor;
+        this.ctx.lineWidth = 3;
         this.ctx.strokeRect(pixelX, pixelY, totalSize, totalSize);
         
         // Afficher le nombre de canons restants
         if (cannonQuota !== null) {
             this.ctx.save();
             
-            // Fond semi-transparent pour le texte
             const textX = pixelX + totalSize / 2;
             const textY = pixelY + totalSize / 2;
             
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            // Fond avec couleur du joueur
+            this.ctx.fillStyle = playerColor || 'rgba(0, 0, 0, 0.7)';
             this.ctx.beginPath();
             this.ctx.arc(textX, textY, 20, 0, Math.PI * 2);
             this.ctx.fill();
             
             // Texte du nombre de canons
             this.ctx.font = 'bold 20px monospace';
-            this.ctx.fillStyle = valid ? '#22c55e' : '#ef4444';
+            this.ctx.fillStyle = '#ffffff';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText(cannonQuota.toString(), textX, textY);
@@ -628,16 +653,25 @@ export class Renderer {
         }
     }
     
-    // Preview pièce Tetris
-    renderTetrisPiecePreview(x, y, piece, valid) {
+    // Preview pièce Tetris avec couleur joueur
+    renderTetrisPiecePreview(x, y, piece, valid, playerColor = null) {
         if (!piece || !piece.pattern) return;
         
         const cellSize = GAME_CONFIG.CELL_SIZE;
         const alpha = valid ? 0.7 : 0.4;
-        const color = valid ? 'rgba(139, 92, 246, ' + alpha + ')' : 'rgba(239, 68, 68, ' + alpha + ')';
         
-        this.ctx.fillStyle = color;
-        this.ctx.strokeStyle = valid ? '#8b5cf6' : '#ef4444';
+        let fillColor, strokeColor;
+        if (playerColor && valid) {
+            const rgb = this.hexToRgb(playerColor);
+            fillColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+            strokeColor = playerColor;
+        } else {
+            fillColor = valid ? 'rgba(139, 92, 246, ' + alpha + ')' : 'rgba(239, 68, 68, ' + alpha + ')';
+            strokeColor = valid ? '#8b5cf6' : '#ef4444';
+        }
+        
+        this.ctx.fillStyle = fillColor;
+        this.ctx.strokeStyle = strokeColor;
         this.ctx.lineWidth = 2;
         
         // Rendu de chaque cellule de la pièce
@@ -657,27 +691,75 @@ export class Renderer {
         }
     }
     
-    // Méthode de preview intégrée
-    renderPreview(previewPosition) {
-        if (!previewPosition) return;
+    // Curseur pour le joueur clavier
+    renderKeyboardCursor(x, y) {
+        const pixelX = x * GAME_CONFIG.CELL_SIZE;
+        const pixelY = y * GAME_CONFIG.CELL_SIZE;
+        const cellSize = GAME_CONFIG.CELL_SIZE;
         
-        if (previewPosition.size) {
-            // Preview canon
+        this.ctx.save();
+        this.ctx.strokeStyle = '#ef4444';
+        this.ctx.lineWidth = 4;
+        this.ctx.setLineDash([8, 4]);
+        this.ctx.strokeRect(pixelX - 2, pixelY - 2, cellSize + 4, cellSize + 4);
+        this.ctx.setLineDash([]);
+        this.ctx.restore();
+    }
+    
+    // Utilitaire pour convertir hex en RGB
+    hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+    
+    // Méthode de preview intégrée (legacy + multijoueur)
+    renderPreview(gameStatePreviews) {
+        // Si c'est du multijoueur avec l'objet previews complet
+        if (gameStatePreviews && gameStatePreviews.mouse !== undefined) {
+            if (gameStatePreviews.mouse) {
+                this.renderSinglePreview(gameStatePreviews.mouse, '#3b82f6'); // Bleu pour joueur 1
+            }
+            if (gameStatePreviews.keyboard) {
+                this.renderSinglePreview(gameStatePreviews.keyboard, '#ef4444'); // Rouge pour joueur 2
+            }
+        } 
+        // Legacy - un seul preview (solo ou fallback)
+        else if (gameStatePreviews) {
+            this.renderSinglePreview(gameStatePreviews);
+        }
+    }
+    
+    renderSinglePreview(preview, playerColor = null) {
+        if (!preview) return;
+        
+        if (preview.size) {
+            // Preview canon avec couleur du joueur
             this.renderPlacementPreview(
-                previewPosition.x, 
-                previewPosition.y, 
-                previewPosition.size, 
-                previewPosition.valid,
-                previewPosition.cannonQuota
+                preview.x, 
+                preview.y, 
+                preview.size, 
+                preview.valid,
+                preview.cannonQuota,
+                playerColor
             );
-        } else if (previewPosition.piece) {
-            // Preview pièce Tetris
+        } else if (preview.piece) {
+            // Preview pièce Tetris avec couleur du joueur
             this.renderTetrisPiecePreview(
-                previewPosition.x,
-                previewPosition.y,
-                previewPosition.piece,
-                previewPosition.valid
+                preview.x,
+                preview.y,
+                preview.piece,
+                preview.valid,
+                playerColor
             );
+        }
+        
+        // Curseur pour le joueur clavier
+        if (playerColor === '#ef4444') {
+            this.renderKeyboardCursor(preview.x, preview.y);
         }
     }
 }
