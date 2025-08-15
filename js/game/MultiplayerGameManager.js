@@ -249,13 +249,12 @@ export class MultiplayerGameManager {
     }
     
     startCombatPhase() {
-        // Pas de limite de temps pour le combat !
-        this.phaseTimeRemaining = null;
+        // En multijoueur : pas d'ennemis, les joueurs se tirent dessus
+        this.phaseTimeRemaining = GAME_CONFIG.TIMERS.COMBAT_PHASE; // 30 secondes de combat
         
-        // Spawner les ennemis
-        this.spawnEnemyWave();
-        
-        console.log('⚔️ Combat Phase started - No time limit, destroy all ships!');
+        // Pas de spawn d'ennemis en multijoueur - PvP uniquement
+        console.log('⚔️ Multiplayer Combat Phase started - Players fight each other!');
+        console.log(`⏱️ Combat time: ${this.phaseTimeRemaining / 1000}s`);
     }
     
     startRepairPhase() {
@@ -320,11 +319,8 @@ export class MultiplayerGameManager {
                 }
             });
             
-            // Vérifier si tous les ennemis sont détruits pour passer à la phase de réparation
-            if (this.enemies.length === 0) {
-                console.log('✅ All enemies destroyed! Moving to repair phase');
-                this.transitionToState(GAME_CONFIG.GAME_STATES.REPAIR);
-            }
+            // En multijoueur : pas de vérification d'ennemis, le combat se termine sur timer
+            // La transition se fait dans updateTimers() quand le temps expire
         }
     }
     

@@ -4,8 +4,8 @@ export const GAME_CONFIG = {
     CELL_SIZE: 32,
     
     GAMEPLAY: {
-        CANNON_RATIO: 0.4,          // 40% des canons possibles
-        MIN_CANNONS: 2,             // Minimum 2 canons par phase
+        CANNON_RATIO: 0.5,          // 50% des canons possibles (augmenté pour multijoueur)
+        MIN_CANNONS: 3,             // Minimum 3 canons par phase (augmenté)
         CANNON_SIZE: 2,             // Canons font 2×2 cases
         CANNON_HP: 30,              // 30 points de vie par canon
         CASTLE_SIZE: 7,             // Château initial 7×7
@@ -13,8 +13,8 @@ export const GAME_CONFIG = {
     },
     
     TIMERS: {
-        COMBAT_PHASE: 30000,        // 30 secondes
-        REPAIR_PHASE: 15000,        // 15 secondes
+        COMBAT_PHASE: 45000,        // 45 secondes (augmenté pour PvP)
+        REPAIR_PHASE: 20000,        // 20 secondes (augmenté)
         PLACE_CANNONS: null,        // Pas de limite fixe
         PHASE_MODAL: 2000,          // 2 secondes pour les annonces
         FRAME_RATE: 60,             // FPS cible

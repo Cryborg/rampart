@@ -392,11 +392,11 @@ export class MultiplayerGrid {
         const centerY = Math.floor(this.height / 2);
         
         // Créer deux îles séparées pour chaque joueur
-        // Île du Joueur 1 (gauche)
-        for (let y = 5; y < this.height - 5; y++) {
-            for (let x = 3; x < centerX - 2; x++) {
+        // Île du Joueur 1 (gauche) - réduite pour équilibrage
+        for (let y = 6; y < this.height - 6; y++) {
+            for (let x = 4; x < centerX - 2; x++) {
                 const distFromP1Center = Math.sqrt((x - 15) ** 2 + (y - centerY) ** 2);
-                if (distFromP1Center < 12) {
+                if (distFromP1Center < 10) {
                     this.setCell(x, y, { 
                         type: GAME_CONFIG.CELL_TYPES.LAND,
                         hp: 1
@@ -405,11 +405,11 @@ export class MultiplayerGrid {
             }
         }
         
-        // Île du Joueur 2 (droite)
-        for (let y = 5; y < this.height - 5; y++) {
-            for (let x = centerX + 2; x < this.width - 3; x++) {
+        // Île du Joueur 2 (droite) - réduite pour équilibrage
+        for (let y = 6; y < this.height - 6; y++) {
+            for (let x = centerX + 2; x < this.width - 4; x++) {
                 const distFromP2Center = Math.sqrt((x - 33) ** 2 + (y - centerY) ** 2);
-                if (distFromP2Center < 12) {
+                if (distFromP2Center < 10) {
                     this.setCell(x, y, { 
                         type: GAME_CONFIG.CELL_TYPES.LAND,
                         hp: 1

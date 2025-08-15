@@ -96,6 +96,11 @@ export class Renderer {
             else if (gameState.previewPosition) {
                 this.renderPreview(gameState.previewPosition);
             }
+            
+            // Toujours afficher le curseur du joueur 2 en multijoueur (clavier)
+            if (gameState.cursors && gameState.cursors.keyboard) {
+                this.renderKeyboardCursor(gameState.cursors.keyboard.x, gameState.cursors.keyboard.y);
+            }
         }
         
         this.updateFPS();
