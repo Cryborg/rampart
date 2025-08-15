@@ -149,11 +149,6 @@ export class GameManager {
         };
         
         this.renderer.render(gameState);
-        
-        // Preview de placement selon l'état
-        if (this.previewPosition) {
-            this.renderPreview();
-        }
     }
     
     // GESTION DES ÉTATS
@@ -276,6 +271,12 @@ export class GameManager {
                     cannon.cooldown -= deltaTime;
                 }
             });
+            
+            // Vérifier si tous les ennemis sont détruits pour passer à la phase de réparation
+            if (this.enemies.length === 0) {
+                console.log('✅ All enemies destroyed! Moving to repair phase');
+                this.transitionToState(GAME_CONFIG.GAME_STATES.REPAIR);
+            }
         }
     }
     
@@ -309,8 +310,11 @@ export class GameManager {
         const dy = targetY - enemy.y;
         const distance = Math.sqrt(dx*dx + dy*dy);
         
-        // Continuer jusqu'à être très proche (0.5 case) et gestion anti-collision
-        if (distance > 0.5) {
+        // Pour les navires, s'arrêter quand on est proche de la destination ET de la côte
+        // Pour les unités terrestres, continuer jusqu'à être très proche (0.5 case)
+        const stopDistance = (enemy.type === 'ship') ? 1.0 : 0.5;
+        
+        if (distance > stopDistance) {
             let newX = enemy.x + (dx / distance) * speed * (deltaTime / 1000);
             let newY = enemy.y + (dy / distance) * speed * (deltaTime / 1000);
             
@@ -374,17 +378,29 @@ export class GameManager {
     checkShipLanding(ship) {
         if (ship.hasLanded) return;
         
-        // Vérifier si le navire est assez proche de la terre pour débarquer
-        const landDistance = this.findDistanceToLand(ship.x, ship.y);
+        // D'abord vérifier si le navire a atteint sa destination
+        const distanceToTarget = Math.sqrt((ship.targetX - ship.x) ** 2 + (ship.targetY - ship.y) ** 2);
         
-        if (landDistance <= GAME_CONFIG.ENEMIES.DISEMBARK_DISTANCE) {
-            if (!ship.isNearCoast) {
+        // Le navire doit être proche de sa destination ET proche de la côte
+        if (distanceToTarget <= 1.5) {
+            const landDistance = this.findDistanceToLand(ship.x, ship.y);
+            
+            if (landDistance <= GAME_CONFIG.ENEMIES.DISEMBARK_DISTANCE) {
+                if (!ship.isNearCoast) {
+                    ship.isNearCoast = true;
+                    console.log(`🏖️ ${GAME_CONFIG.ENEMIES.SHIP_TYPES[ship.shipType].name} ship reached landing point`);
+                }
+                
+                // Débarquer seulement une fois arrivé à destination
+                this.landTroops(ship);
+            }
+        } else {
+            // Si pas encore arrivé à destination, signaler approche de la côte
+            const landDistance = this.findDistanceToLand(ship.x, ship.y);
+            if (landDistance <= GAME_CONFIG.ENEMIES.DISEMBARK_DISTANCE && !ship.isNearCoast) {
                 ship.isNearCoast = true;
                 console.log(`🏖️ ${GAME_CONFIG.ENEMIES.SHIP_TYPES[ship.shipType].name} ship approaching coast`);
             }
-            
-            // Débarquer immédiatement quand on atteint la côte
-            this.landTroops(ship);
         }
     }
     
@@ -470,17 +486,17 @@ export class GameManager {
             return;
         }
         
-        // Trouver le canon le plus proche dans la portée
-        const targetCannon = this.findNearestCannonInRange(unit);
-        if (!targetCannon) return;
+        // Trouver la cible la plus proche dans la portée (canon ou château)
+        const target = this.findNearestCannonInRange(unit);
+        if (!target) return;
         
         // Attaquer selon le type d'unité
         if (unit.unitType === 'TANK') {
             // Tank attaque à distance
-            this.tankAttackCannon(unit, targetCannon);
+            this.tankAttackTarget(unit, target);
         } else if (unit.unitType === 'INFANTRY') {
             // Infanterie attaque au corps à corps
-            this.infantryAttackCannon(unit, targetCannon);
+            this.infantryAttackTarget(unit, target);
         }
         
         // Reset du cooldown
@@ -488,31 +504,35 @@ export class GameManager {
     }
     
     findNearestCannonInRange(unit) {
-        let nearestCannon = null;
+        let nearestTarget = null;
         let minDistance = Infinity;
         
-        // Parcourir toutes les cases pour trouver les canons
+        // Parcourir toutes les cases pour trouver les canons ET le château
         for (let y = 0; y < GAME_CONFIG.GRID_HEIGHT; y++) {
             for (let x = 0; x < GAME_CONFIG.GRID_WIDTH; x++) {
                 const cell = this.grid.getCell(x, y);
-                if (cell && cell.type === GAME_CONFIG.CELL_TYPES.CANNON && cell.hp > 0) {
+                if (cell && (
+                    (cell.type === GAME_CONFIG.CELL_TYPES.CANNON && cell.hp > 0) ||
+                    cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE
+                )) {
                     const distance = Math.sqrt((x - unit.x) ** 2 + (y - unit.y) ** 2);
                     
                     // Vérifier si dans la portée
                     if (distance <= unit.range && distance < minDistance) {
                         minDistance = distance;
-                        nearestCannon = { x, y, cell };
+                        nearestTarget = { x, y, cell };
                     }
                 }
             }
         }
         
-        return nearestCannon;
+        return nearestTarget;
     }
     
-    tankAttackCannon(tank, target) {
-        // Tank tire un projectile vers le canon
-        console.log(`💥 Tank firing at cannon at (${target.x}, ${target.y}) - Range: ${Math.sqrt((target.x - tank.x) ** 2 + (target.y - tank.y) ** 2).toFixed(1)}`);
+    tankAttackTarget(tank, target) {
+        // Tank tire un projectile vers la cible (canon ou château)
+        const targetType = target.cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE ? 'castle' : 'cannon';
+        console.log(`💥 Tank firing at ${targetType} at (${target.x}, ${target.y}) - Range: ${Math.sqrt((target.x - tank.x) ** 2 + (target.y - tank.y) ** 2).toFixed(1)}`);
         
         const tankPixelX = tank.x * GAME_CONFIG.CELL_SIZE;
         const tankPixelY = tank.y * GAME_CONFIG.CELL_SIZE;
@@ -538,9 +558,10 @@ export class GameManager {
         });
     }
     
-    infantryAttackCannon(infantry, target) {
+    infantryAttackTarget(infantry, target) {
         // Infanterie attaque directement (pas de projectile)
-        console.log(`⚔️ Infantry attacking cannon at (${target.x}, ${target.y}) - Melee attack!`);
+        const targetType = target.cell.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE ? 'castle' : 'cannon';
+        console.log(`⚔️ Infantry attacking ${targetType} at (${target.x}, ${target.y}) - Melee attack!`);
         
         // Infliger directement les dégâts
         const damaged = this.grid.damageCell(target.x, target.y, infantry.damage);
@@ -764,7 +785,17 @@ export class GameManager {
     }
     
     spawnEnemyWave() {
-        const waveSize = Math.min(3 + this.currentRound, 8);
+        // Progression du nombre d'ennemis selon le round
+        let waveSize;
+        if (this.currentRound === 1) {
+            waveSize = 3; // Commencer doucement
+        } else if (this.currentRound <= 3) {
+            waveSize = 3 + this.currentRound;
+        } else {
+            waveSize = Math.min(5 + Math.floor(this.currentRound / 2), 10); // Max 10 navires
+        }
+        
+        console.log(`🌊 Wave ${this.currentRound}: Spawning ${waveSize} ships`);
         
         for (let i = 0; i < waveSize; i++) {
             setTimeout(() => {
@@ -778,9 +809,37 @@ export class GameManager {
         const spawnX = GAME_CONFIG.GRID_WIDTH - 1;
         const spawnY = Math.random() * GAME_CONFIG.GRID_HEIGHT;
         
-        // Choisir un type de navire aléatoire
-        const shipTypes = Object.keys(GAME_CONFIG.ENEMIES.SHIP_TYPES);
-        const randomType = shipTypes[Math.floor(Math.random() * shipTypes.length)];
+        // Choisir un type de navire selon le round actuel
+        let availableShipTypes = [];
+        
+        // Round 1-2 : Seulement des navires faibles (NOVICE)
+        if (this.currentRound <= 2) {
+            availableShipTypes = ['NOVICE'];
+        }
+        // Round 3-4 : Navires faibles et moyens
+        else if (this.currentRound <= 4) {
+            availableShipTypes = ['NOVICE', 'NOVICE', 'VETERAN']; // Plus de chance d'avoir des NOVICE
+        }
+        // Round 5+ : Tous les types avec probabilités croissantes
+        else {
+            // Plus le round est élevé, plus il y a de chance d'avoir des navires forts
+            availableShipTypes = ['NOVICE', 'VETERAN'];
+            
+            // Ajouter des navires experts après le round 5
+            if (this.currentRound >= 5) {
+                availableShipTypes.push('EXPERT');
+                
+                // Augmenter les chances de navires forts selon le round
+                if (this.currentRound >= 7) {
+                    availableShipTypes.push('VETERAN', 'EXPERT'); // Double les chances
+                }
+                if (this.currentRound >= 10) {
+                    availableShipTypes.push('EXPERT'); // Triple les chances pour experts
+                }
+            }
+        }
+        
+        const randomType = availableShipTypes[Math.floor(Math.random() * availableShipTypes.length)];
         const shipConfig = GAME_CONFIG.ENEMIES.SHIP_TYPES[randomType];
         
         // Choisir un point de débarquement sur la côte
@@ -1087,14 +1146,24 @@ export class GameManager {
                 const landingPosition = this.findNearestLandPosition(ship.x, ship.y);
                 
                 // Ajouter un petit décalage pour éviter que toutes les troupes se superposent
-                const offsetX = (Math.random() - 0.5) * 1.5;
-                const offsetY = (Math.random() - 0.5) * 1.5;
+                let offsetX, offsetY, finalX, finalY;
+                let attempts = 0;
                 
-                const landUnit = this.createLandUnit(
-                    landingPosition.x + offsetX,
-                    landingPosition.y + offsetY,
-                    force.type
-                );
+                do {
+                    offsetX = (Math.random() - 0.5) * 1.5;
+                    offsetY = (Math.random() - 0.5) * 1.5;
+                    finalX = landingPosition.x + offsetX;
+                    finalY = landingPosition.y + offsetY;
+                    attempts++;
+                } while (!this.isValidTerrainForUnit(finalX, finalY, 'land_unit') && attempts < 10);
+                
+                // Si on n'a pas trouvé de position valide, utiliser la position de base
+                if (attempts >= 10) {
+                    finalX = landingPosition.x;
+                    finalY = landingPosition.y;
+                }
+                
+                const landUnit = this.createLandUnit(finalX, finalY, force.type);
                 
                 if (landUnit) {
                     this.enemies.push(landUnit);
@@ -1319,6 +1388,10 @@ export class GameManager {
     handlePhaseTimeout() {
         // Gérer la fin du timer selon la phase actuelle
         switch (this.currentState) {
+            case GAME_CONFIG.GAME_STATES.PLACE_CANNONS:
+                // Passer à la phase de combat quand le timer expire
+                this.transitionToState(GAME_CONFIG.GAME_STATES.COMBAT);
+                break;
             case GAME_CONFIG.GAME_STATES.COMBAT:
                 this.transitionToState(GAME_CONFIG.GAME_STATES.REPAIR);
                 break;
@@ -1578,29 +1651,6 @@ export class GameManager {
             
             // S'assurer que Game Over a le fond sombre normal
             modal.classList.remove('hidden', 'phase-announcement');
-        }
-    }
-    
-    renderPreview() {
-        if (!this.previewPosition) return;
-        
-        if (this.previewPosition.size) {
-            // Preview canon
-            this.renderer.renderPlacementPreview(
-                this.previewPosition.x, 
-                this.previewPosition.y, 
-                this.previewPosition.size, 
-                this.previewPosition.valid,
-                this.previewPosition.cannonQuota
-            );
-        } else if (this.previewPosition.piece) {
-            // Preview pièce Tetris
-            this.renderer.renderTetrisPiecePreview(
-                this.previewPosition.x,
-                this.previewPosition.y,
-                this.previewPosition.piece,
-                this.previewPosition.valid
-            );
         }
     }
 }

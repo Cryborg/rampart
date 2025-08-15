@@ -16,6 +16,9 @@ export class Renderer {
         this.lastFrameTime = 0;
         this.frameCount = 0;
         this.fps = 0;
+        
+        // Etat du jeu pour graphismes améliorés
+        this.gameState = null;
     }
     
     setupCanvas() {
@@ -71,6 +74,10 @@ export class Renderer {
     
     // Méthode principale de rendu
     render(gameState) {
+        // Stocker l'état et la grille pour les graphismes conditionnels
+        this.gameState = gameState.currentState;
+        this.currentGrid = gameState.grid;
+        
         this.clearCanvas();
         this.updateAnimations();
         
@@ -79,6 +86,9 @@ export class Renderer {
             this.renderCannonZones(gameState.grid);
             this.renderEntities(gameState);
             this.renderEffects();
+            
+            // Rendu du preview APRÈS tout le reste
+            this.renderPreview(gameState.previewPosition);
         }
         
         this.updateFPS();
@@ -124,10 +134,10 @@ export class Renderer {
                 color = this.getLandColor(x, y);
                 break;
             case GAME_CONFIG.CELL_TYPES.WALL:
-                color = GAME_CONFIG.COLORS.WALL;
+                color = this.getWallColor(x, y);
                 break;
             case GAME_CONFIG.CELL_TYPES.CASTLE_CORE:
-                color = GAME_CONFIG.COLORS.CASTLE_CORE;
+                color = this.getCastleCoreColor(x, y);
                 break;
             case GAME_CONFIG.CELL_TYPES.CANNON:
                 color = GAME_CONFIG.COLORS.CANNON;
@@ -156,6 +166,11 @@ export class Renderer {
     }
     
     getWaterColor(x, y) {
+        // Graphismes améliorés pendant la phase de combat
+        if (this.gameState === GAME_CONFIG.GAME_STATES.COMBAT) {
+            return this.getEnhancedWaterColor(x, y);
+        }
+        
         // Eau statique avec légère variation pour éviter l'uniformité
         const variation = Math.sin(x * 0.1 + y * 0.08) * 15;
         
@@ -163,7 +178,50 @@ export class Renderer {
         return variation > 0 ? GAME_CONFIG.COLORS.WATER_LIGHT : GAME_CONFIG.COLORS.WATER;
     }
     
+    getEnhancedWaterColor(x, y) {
+        // Détection des côtes - check si il y a de la terre à proximité
+        const hasLandNearby = this.checkLandProximity(x, y, 2);
+        
+        if (hasLandNearby) {
+            // Zone côtière - eau plus claire avec teinte sableuse
+            const wavePattern = Math.sin(x * 0.2 + y * 0.15) * 30;
+            const r = Math.floor(100 + wavePattern);
+            const g = Math.floor(180 + wavePattern);
+            const b = Math.floor(230 + wavePattern * 0.5);
+            return `rgb(${Math.max(80, Math.min(255, r))}, ${Math.max(160, Math.min(255, g))}, ${Math.max(200, Math.min(255, b))})`;
+        } else {
+            // Eau profonde - dégradés de bleu réalistes
+            const depth = Math.sin(x * 0.05 + y * 0.04) * 40;
+            const r = Math.floor(30 + depth * 0.3);
+            const g = Math.floor(90 + depth * 0.5);
+            const b = Math.floor(160 + depth);
+            return `rgb(${Math.max(20, Math.min(80, r))}, ${Math.max(60, Math.min(140, g))}, ${Math.max(120, Math.min(200, b))})`;
+        }
+    }
+    
+    checkLandProximity(x, y, radius) {
+        // Vérifier s'il y a de la terre dans un rayon donné
+        if (!this.currentGrid) return false;
+        
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                const checkX = x + dx;
+                const checkY = y + dy;
+                const cell = this.currentGrid.getCell(checkX, checkY);
+                if (cell && cell.type === GAME_CONFIG.CELL_TYPES.LAND) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
     getLandColor(x, y) {
+        // Graphismes améliorés pendant la phase de combat
+        if (this.gameState === GAME_CONFIG.GAME_STATES.COMBAT) {
+            return this.getEnhancedLandColor(x, y);
+        }
+        
         // Motif damier pour la terre avec variation subtile
         const isCheckerboard = (x + y) % 2 === 0;
         const grassVariation = Math.sin(x * 0.15 + y * 0.12) * 8; // Variation plus naturelle
@@ -181,6 +239,84 @@ export class Renderer {
             const b = Math.floor(74 + grassVariation);
             return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
         }
+    }
+    
+    getEnhancedLandColor(x, y) {
+        // Terrain réaliste avec plusieurs nuances d'herbe
+        const grassPattern1 = Math.sin(x * 0.3 + y * 0.25) * 20;
+        const grassPattern2 = Math.sin(x * 0.1 + y * 0.08) * 15;
+        const grassPattern3 = Math.sin(x * 0.05 + y * 0.12) * 10;
+        
+        // Mélange de différentes nuances de vert
+        const baseR = 45 + grassPattern1 + grassPattern3;
+        const baseG = 160 + grassPattern2 + grassPattern1;
+        const baseB = 70 + grassPattern3;
+        
+        // Ajouter quelques zones plus sombres pour le réalisme
+        const darkSpots = Math.sin(x * 0.4 + y * 0.3) > 0.7 ? -25 : 0;
+        
+        const r = Math.floor(baseR + darkSpots);
+        const g = Math.floor(baseG + darkSpots);
+        const b = Math.floor(baseB + darkSpots);
+        
+        return `rgb(${Math.max(30, Math.min(255, r))}, ${Math.max(120, Math.min(255, g))}, ${Math.max(50, Math.min(255, b))})`;
+    }
+    
+    getWallColor(x, y) {
+        // Graphismes améliorés pendant la phase de combat
+        if (this.gameState === GAME_CONFIG.GAME_STATES.COMBAT) {
+            return this.getEnhancedWallColor(x, y);
+        }
+        
+        // Couleur standard des murs
+        return GAME_CONFIG.COLORS.WALL;
+    }
+    
+    getEnhancedWallColor(x, y) {
+        // Texture de pierre réaliste
+        const stonePattern1 = Math.sin(x * 0.4 + y * 0.3) * 25;
+        const stonePattern2 = Math.sin(x * 0.2 + y * 0.15) * 15;
+        const stonePattern3 = Math.sin(x * 0.6 + y * 0.5) * 10;
+        
+        // Couleur de base gris pierre
+        const baseR = 120 + stonePattern1 + stonePattern3;
+        const baseG = 120 + stonePattern2 + stonePattern1 * 0.5;
+        const baseB = 115 + stonePattern3 + stonePattern2 * 0.3;
+        
+        // Ajouter des nuances plus sombres pour les joints
+        const darkJoints = (Math.sin(x * 0.8) > 0.8 || Math.sin(y * 0.8) > 0.8) ? -30 : 0;
+        
+        const r = Math.floor(baseR + darkJoints);
+        const g = Math.floor(baseG + darkJoints);
+        const b = Math.floor(baseB + darkJoints);
+        
+        return `rgb(${Math.max(80, Math.min(180, r))}, ${Math.max(80, Math.min(180, g))}, ${Math.max(80, Math.min(170, b))})`;
+    }
+    
+    getCastleCoreColor(x, y) {
+        // Graphismes améliorés pendant la phase de combat
+        if (this.gameState === GAME_CONFIG.GAME_STATES.COMBAT) {
+            return this.getEnhancedCastleCoreColor(x, y);
+        }
+        
+        // Couleur standard du château
+        return GAME_CONFIG.COLORS.CASTLE_CORE;
+    }
+    
+    getEnhancedCastleCoreColor(x, y) {
+        // Château en pierre plus sombre et majestueuse
+        const stonePattern = Math.sin(x * 0.3 + y * 0.2) * 20;
+        const aged = Math.sin(x * 0.1 + y * 0.15) * 15;
+        
+        const baseR = 90 + stonePattern;
+        const baseG = 85 + aged;
+        const baseB = 80 + stonePattern * 0.5;
+        
+        const r = Math.floor(baseR);
+        const g = Math.floor(baseG);
+        const b = Math.floor(baseB);
+        
+        return `rgb(${Math.max(60, Math.min(130, r))}, ${Math.max(60, Math.min(120, g))}, ${Math.max(60, Math.min(110, b))})`;
     }
     
     
@@ -518,6 +654,30 @@ export class Renderer {
                     this.ctx.strokeRect(pixelX, pixelY, cellSize, cellSize);
                 }
             }
+        }
+    }
+    
+    // Méthode de preview intégrée
+    renderPreview(previewPosition) {
+        if (!previewPosition) return;
+        
+        if (previewPosition.size) {
+            // Preview canon
+            this.renderPlacementPreview(
+                previewPosition.x, 
+                previewPosition.y, 
+                previewPosition.size, 
+                previewPosition.valid,
+                previewPosition.cannonQuota
+            );
+        } else if (previewPosition.piece) {
+            // Preview pièce Tetris
+            this.renderTetrisPiecePreview(
+                previewPosition.x,
+                previewPosition.y,
+                previewPosition.piece,
+                previewPosition.valid
+            );
         }
     }
 }
