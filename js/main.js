@@ -1,10 +1,12 @@
 import { GameManager } from './game/GameManager.js';
+import { MultiplayerGameManager } from './game/MultiplayerGameManager.js';
 
 // Point d'entrée principal - KISS principle
 class RampartApp {
     constructor() {
         this.gameManager = null;
         this.canvas = null;
+        this.isMultiplayer = false;
     }
     
     // Initialisation simple et claire
@@ -15,8 +17,7 @@ class RampartApp {
             // Setup Canvas
             this.setupCanvas();
             
-            // Créer le GameManager
-            this.gameManager = new GameManager(this.canvas);
+            // Ne pas créer de GameManager ici, attendre le choix du mode
             
             // Setup UI events
             this.setupUI();
@@ -101,7 +102,14 @@ class RampartApp {
             });
         }
         
-        // Le bouton multijoueur est désactivé pour l'instant
+        // Bouton Multijoueur
+        const multiButton = document.getElementById('multi-button');
+        if (multiButton) {
+            multiButton.addEventListener('click', () => {
+                this.startMultiplayerGame();
+            });
+        }
+        
         console.log('🎮 Menu events setup complete');
     }
     
@@ -138,6 +146,16 @@ class RampartApp {
     
     startSoloGame() {
         console.log('🎮 Starting solo game...');
+        this.isMultiplayer = false;
+        this.gameManager = new GameManager(this.canvas);
+        this.hideMainMenu();
+        this.startGame();
+    }
+    
+    startMultiplayerGame() {
+        console.log('👥 Starting multiplayer game...');
+        this.isMultiplayer = true;
+        this.gameManager = new MultiplayerGameManager(this.canvas);
         this.hideMainMenu();
         this.startGame();
     }
