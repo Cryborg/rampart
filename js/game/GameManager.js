@@ -1548,6 +1548,17 @@ export class GameManager {
     }
     
     updateUI() {
+        // Masquer l'UI multiplayer et afficher solo
+        const player1Stats = document.getElementById('player1-stats');
+        const player2Stats = document.getElementById('player2-stats');
+        const legacyCannonItem = document.getElementById('legacy-cannons-item');
+        const legacyScoreItem = document.getElementById('legacy-score-item');
+        
+        if (player1Stats) player1Stats.style.display = 'none';
+        if (player2Stats) player2Stats.style.display = 'none';
+        if (legacyCannonItem) legacyCannonItem.style.display = 'flex';
+        if (legacyScoreItem) legacyScoreItem.style.display = 'flex';
+        
         // Update des éléments UI
         const elements = {
             'current-round': this.currentRound,

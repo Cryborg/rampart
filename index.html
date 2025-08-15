@@ -27,10 +27,15 @@
                 <div class="menu-info">
                     <h3>Comment jouer :</h3>
                     <ul>
-                        <li>🏗️ <strong>Phase Construction :</strong> Placez vos pièces Tetris pour créer des zones fermées</li>
-                        <li>🎯 <strong>Phase Canons :</strong> Installez vos canons dans les zones dorées</li>
-                        <li>⚔️ <strong>Phase Combat :</strong> Détruisez tous les navires ennemis !</li>
-                        <li>🔧 <strong>Phase Réparation :</strong> Survivez tant que vos canons ou château sont protégés</li>
+                        <li>🎯 <strong>Phase Canons :</strong> Placez vos canons dans vos zones dorées</li>
+                        <li>⚔️ <strong>Phase Combat :</strong> Cliquez pour tirer avec vos canons</li>
+                        <li>🔧 <strong>Phase Réparation :</strong> Réparez vos murs avec les pièces Tetris</li>
+                    </ul>
+                    
+                    <h3>Contrôles Multijoueur :</h3>
+                    <ul>
+                        <li>🟦 <strong>Joueur 1 :</strong> Souris (clic = action, clic droit = rotation)</li>
+                        <li>🟥 <strong>Joueur 2 :</strong> Flèches (déplacement) + Espace (action) + Entrée (rotation)</li>
                     </ul>
                 </div>
             </div>
@@ -52,13 +57,43 @@
                         <span class="stat-label">Round:</span>
                         <span class="stat-value" id="current-round">1</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Canons:</span>
-                        <span class="stat-value" id="cannons-remaining">0</span>
+                    
+                    <!-- Stats Joueur 1 -->
+                    <div id="player1-stats" class="player-stats">
+                        <h4 style="color: #3b82f6;">🟦 Joueur 1</h4>
+                        <div class="stat-item">
+                            <span class="stat-label">Canons:</span>
+                            <span class="stat-value" id="player1-cannons">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Score:</span>
+                            <span class="stat-value" id="player1-score">0</span>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Score:</span>
-                        <span class="stat-value" id="player-score">0</span>
+                    
+                    <!-- Stats Joueur 2 (masqué en solo) -->
+                    <div id="player2-stats" class="player-stats" style="display: none;">
+                        <h4 style="color: #ef4444;">🟥 Joueur 2</h4>
+                        <div class="stat-item">
+                            <span class="stat-label">Canons:</span>
+                            <span class="stat-value" id="player2-cannons">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Score:</span>
+                            <span class="stat-value" id="player2-score">0</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats legacy (pour solo) -->
+                    <div id="legacy-stats">
+                        <div class="stat-item" style="display: none;" id="legacy-cannons-item">
+                            <span class="stat-label">Canons:</span>
+                            <span class="stat-value" id="cannons-remaining">0</span>
+                        </div>
+                        <div class="stat-item" style="display: none;" id="legacy-score-item">
+                            <span class="stat-label">Score:</span>
+                            <span class="stat-value" id="player-score">0</span>
+                        </div>
                     </div>
                 </div>
                 

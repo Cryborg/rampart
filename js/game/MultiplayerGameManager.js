@@ -1757,11 +1757,22 @@ export class MultiplayerGameManager {
     }
     
     updateUI() {
+        // Afficher l'UI multiplayer et masquer solo
+        const player1Stats = document.getElementById('player1-stats');
+        const player2Stats = document.getElementById('player2-stats');
+        const legacyStats = document.getElementById('legacy-stats');
+        
+        if (player1Stats) player1Stats.style.display = 'block';
+        if (player2Stats) player2Stats.style.display = 'block';
+        if (legacyStats) legacyStats.style.display = 'none';
+        
         // Update des éléments UI
         const elements = {
             'current-round': this.currentRound,
-            'cannons-remaining': this.currentPlayer ? this.currentPlayer.cannonQuota : 0,
-            'player-score': this.gameStats.score,
+            'player1-cannons': this.players[0] ? this.players[0].cannonQuota : 0,
+            'player1-score': this.players[0] ? this.players[0].score : 0,
+            'player2-cannons': this.players[1] ? this.players[1].cannonQuota : 0,
+            'player2-score': this.players[1] ? this.players[1].score : 0,
             'debug-state': this.currentState,
             'phase-title': this.getPhaseTitle(),
             'phase-description': this.getPhaseDescription()

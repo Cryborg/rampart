@@ -381,15 +381,15 @@ export class MultiplayerGrid {
         }
         
         // Château du Joueur 1 (gauche)
-        const castle1X = 15;
-        const castle1Y = centerY;
-        this.createCastle(castle1X, castle1Y, 1);
+        const castle1X = 15 - Math.floor(GAME_CONFIG.GAMEPLAY.CASTLE_SIZE / 2);
+        const castle1Y = centerY - Math.floor(GAME_CONFIG.GAMEPLAY.CASTLE_SIZE / 2);
+        this.buildCastle(castle1X, castle1Y, 1);
         console.log('🏰 Player 1 castle at', castle1X, castle1Y);
         
         // Château du Joueur 2 (droite)
-        const castle2X = 33;
-        const castle2Y = centerY;
-        this.createCastle(castle2X, castle2Y, 2);
+        const castle2X = 33 - Math.floor(GAME_CONFIG.GAMEPLAY.CASTLE_SIZE / 2);
+        const castle2Y = centerY - Math.floor(GAME_CONFIG.GAMEPLAY.CASTLE_SIZE / 2);
+        this.buildCastle(castle2X, castle2Y, 2);
         console.log('🏰 Player 2 castle at', castle2X, castle2Y);
         
         // Zone d'eau centrale pour séparer les territoires
