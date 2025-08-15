@@ -1440,12 +1440,17 @@ export class MultiplayerGameManager {
     }
     
     tryPlaceCannonForPlayer(x, y, player) {
+        console.log(`🔫 ${player.name} trying to place cannon at (${x}, ${y}), quota: ${player.cannonQuota}`);
+        
         if (player.cannonQuota <= 0) {
             console.log(`❌ ${player.name}: No more cannons available!`);
             return false;
         }
         
-        if (this.grid.canPlaceCannon(x, y, player.id)) {
+        const canPlace = this.grid.canPlaceCannon(x, y, player.id);
+        console.log(`🔍 Can place cannon: ${canPlace}`);
+        
+        if (canPlace) {
             const cannonData = {
                 id: `cannon_${Date.now()}_p${player.id}`,
                 ownerId: player.id,

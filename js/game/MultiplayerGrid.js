@@ -136,11 +136,18 @@ export class MultiplayerGrid {
         return closedAreas;
     }
     
-    // Vérifier si une zone contient un château
-    containsCastleCore(area) {
+    // Vérifier si une zone contient un château d'un joueur spécifique
+    containsCastleCore(area, playerId = null) {
         return area.some(cell => {
             const cellData = this.getCell(cell.x, cell.y);
-            return cellData && cellData.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE;
+            if (!cellData || cellData.type !== GAME_CONFIG.CELL_TYPES.CASTLE_CORE) return false;
+            
+            // Si playerId spécifié, vérifier l'ownership
+            if (playerId !== null) {
+                return cellData.ownerId === playerId;
+            }
+            
+            return true; // N'importe quel château
         });
     }
     
@@ -154,16 +161,26 @@ export class MultiplayerGrid {
         let totalConstructibleCells = 0;
         
         closedAreas.forEach((area, index) => {
-            console.log(`📦 Zone fermée ${index + 1}: ${area.length} cases`);
-            area.forEach(cell => {
+            // Vérifier si cette zone appartient au joueur (contient son château)
+            const belongsToPlayer = area.some(cell => {
                 const cellData = this.getCell(cell.x, cell.y);
-                // Toutes les cases traversables dans une zone fermée peuvent accueillir des canons
-                if (cellData && this.canPassThrough(cellData.type)) {
-                    cellData.cannonZone = true;
-                    cellData.cannonZoneOwnerId = playerId;
-                    totalConstructibleCells++;
-                }
+                return cellData && cellData.type === GAME_CONFIG.CELL_TYPES.CASTLE_CORE && cellData.ownerId === playerId;
             });
+            
+            if (belongsToPlayer) {
+                console.log(`📦 Zone fermée ${index + 1} appartient au joueur ${playerId}: ${area.length} cases`);
+                area.forEach(cell => {
+                    const cellData = this.getCell(cell.x, cell.y);
+                    // Toutes les cases traversables dans une zone fermée peuvent accueillir des canons
+                    if (cellData && this.canPassThrough(cellData.type)) {
+                        cellData.cannonZone = true;
+                        cellData.cannonZoneOwnerId = playerId;
+                        totalConstructibleCells++;
+                    }
+                });
+            } else {
+                console.log(`📦 Zone fermée ${index + 1} n'appartient PAS au joueur ${playerId}`);
+            }
         });
         
         return totalConstructibleCells;
